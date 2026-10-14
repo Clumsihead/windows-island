@@ -1,0 +1,21 @@
+# build output
+node_modules
+dist
+src-tauri/target
+src-tauri/gen
+/release/
+
+# editor / OS
+.vs
+.idea
+Thumbs.db
+
+# local AI-tool config (not part of the app)
+.claude/
+.gitnexus/
+AGENTS.md
+CODEX.md
+
+# local secrets, just in case
+.env
+.env.*

@@ -1,0 +1,39 @@
+# Builds the Windows installer and attaches it to a draft GitHub Release
+# whenever you push a version tag, e.g.:  git tag v0.4.0 && git push origin v0.4.0
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Windows Island ${{ github.ref_name }}"
+          releaseBody: "Download the -setup.exe below, run it, and the island appears at the top of your screen."
+          releaseDraft: true
+          prerelease: false

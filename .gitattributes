@@ -1,0 +1,5 @@
+* text=auto
+# Batch files and NSIS scripts must keep Windows line endings or labels/goto can break.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.nsh text eol=crlf
