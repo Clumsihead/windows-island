@@ -4,7 +4,7 @@ import {
   SlidersHorizontal, CalendarDays,
 } from "lucide-react";
 import { api, onExpanded, EMPTY_MEDIA, Stats, Media } from "./api";
-import { usePoll, useClock } from "./hooks";
+import { usePoll, useClock, useHour24, formatTime } from "./hooks";
 import { SpringBox, OPEN, RETAB, CLOSE, Box } from "./spring";
 import Controls from "./tabs/Controls";
 import Today from "./tabs/Today";
@@ -45,6 +45,7 @@ export default function App() {
   const stats = usePoll<Stats | null>(api.stats, expanded ? 1000 : 5000, null);
   const media = usePoll<Media>(api.media, expanded ? 1000 : 2000, EMPTY_MEDIA);
   const now = useClock(!expanded);
+  const [h24] = useHour24();
 
   // Window <-> Rust state
   useEffect(() => {
@@ -111,7 +112,7 @@ export default function App() {
           <span className="compact-title">
             {media.available && media.playing
               ? media.title || "Playing"
-              : now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              : formatTime(now, h24)}
           </span>
           {media.available && media.playing ? (
             <span className="eq" aria-hidden><i /><i /><i /><i /></span>

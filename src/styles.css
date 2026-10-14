@@ -136,7 +136,8 @@ button { border: 0; background: none; cursor: pointer; }
 .hero-date { display: flex; align-items: center; gap: 13px; padding: 12px 14px; border-radius: 14px; background: linear-gradient(110deg, #28251d, #1b1b1b 65%); border: 1px solid #d5b45f17; }
 .hero-date strong { font-size: 38px; font-weight: 500; color: var(--gold-bright); line-height: 1; }
 .hero-date span { font-size: 11px; color: #d5d0c4; }
-.hero-date .hero-time { margin-left: auto; font-size: 20px; font-weight: 500; color: var(--text); }
+.hero-date .hero-time { margin-left: auto; font-size: 20px; font-weight: 500; color: var(--text); padding: 4px 9px; border-radius: 9px; transition: background 160ms; font-variant-numeric: tabular-nums; }
+.hero-date .hero-time:hover { background: #ffffff0f; }
 .card textarea { width: 100%; height: 120px; resize: none; background: #141414; border: 1px solid #ffffff13; border-radius: 9px; padding: 10px; outline: none; font-size: 11px; line-height: 1.5; }
 .card textarea:focus { border-color: #d5b45f77; }
 

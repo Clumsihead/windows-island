@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Zap } from "lucide-react";
-import { useClock } from "../hooks";
+import { useClock, useHour24, formatTime } from "../hooks";    
 
 const KEY = "island.note";
 
 export default function Today() {
   const now = useClock();
+  const [h24, toggleH24] = useHour24();
   const [note, setNote] = useState(() => {
     try {
       return localStorage.getItem(KEY) ?? "";
@@ -30,7 +31,9 @@ export default function Today() {
         <span>{now.toLocaleDateString(undefined, { weekday: "long" })}</span>
         <strong>{now.getDate()}</strong>
         <span>{now.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</span>
-        <span className="hero-time">{now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+        <button className="hero-time" onClick={toggleH24} title={h24 ? "Switch to 12-hour" : "Switch to 24-hour"}>
+          {formatTime(now, h24)}
+        </button>
       </div>
       <div className="card">
         <div className="card-title"><Zap size={15} /> Quick note</div>
