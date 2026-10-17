@@ -25,9 +25,7 @@ fn read() -> windows::core::Result<Radios> {
 
 fn set(kind: &str, on: bool) -> windows::core::Result<()> {
     if Radio::RequestAccessAsync()?.get()? != RadioAccessStatus::Allowed {
-        return Err(windows::core::Error::from_hresult(windows::core::HRESULT(
-            0x80070005u32 as i32,
-        )));
+        return Err(windows::core::Error::from_hresult(windows::core::HRESULT(0x80070005u32 as i32)));
     }
     let want = match kind {
         "wifi" => RadioKind::WiFi,
@@ -45,9 +43,7 @@ fn set(kind: &str, on: bool) -> windows::core::Result<()> {
 
 #[tauri::command]
 pub async fn radio_get() -> Radios {
-    tauri::async_runtime::spawn_blocking(|| read().unwrap_or_default())
-        .await
-        .unwrap_or_default()
+    tauri::async_runtime::spawn_blocking(|| read().unwrap_or_default()).await.unwrap_or_default()
 }
 
 /// The UI falls back to the Windows Settings page when this errors.

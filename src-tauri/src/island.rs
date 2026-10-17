@@ -3,7 +3,7 @@
 //! and makes the transparent parts of the window click-through.
 
 use std::error::Error;
-use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering::SeqCst};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -13,8 +13,8 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow}
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetWindowLongPtrW, SetWindowLongPtrW, ShowWindow, GWL_EXSTYLE, SW_HIDE,
-    SW_SHOWNOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+    GetCursorPos, GetForegroundWindow, GetWindowLongPtrW, SetForegroundWindow, SetWindowLongPtrW,
+    ShowWindow, GWL_EXSTYLE, SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 
 pub const LABEL: &str = "island";
@@ -38,6 +38,8 @@ pub struct Island {
     pub pinned: AtomicBool,
     /// Opened with the hotkey: ignore mouse-leave, close on blur / Esc instead.
     pub held: AtomicBool,
+    /// The window that was in front before the hotkey took focus, so "paste" can give it back.
+    pub prev_fg: AtomicIsize,
     pub visible: AtomicBool,
     pub hide_pending: AtomicBool,
     pub desktop_only: AtomicBool,
@@ -59,6 +61,7 @@ impl Island {
             expanded: AtomicBool::new(false),
             pinned: AtomicBool::new(false),
             held: AtomicBool::new(false),
+            prev_fg: AtomicIsize::new(0),
             visible: AtomicBool::new(false),
             hide_pending: AtomicBool::new(false),
             // Default to showing the island over every foreground window.
@@ -223,6 +226,7 @@ pub fn hotkey(app: &AppHandle) {
     if st.desktop_only.load(SeqCst) && !st.desktop_active.load(SeqCst) {
         st.forced.store(true, SeqCst);
     }
+    remember_foreground(app);
     apply_visibility(app);
     st.held.store(true, SeqCst);
     set_expanded(app, true);
@@ -233,6 +237,39 @@ pub fn hotkey(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(LABEL) {
         let _ = window.set_focus();
     }
+}
+
+/// Notes which window is in front right now (unless it is the island itself).
+fn remember_foreground(app: &AppHandle) {
+    let fg = unsafe { GetForegroundWindow() };
+    if fg.0.is_null() {
+        return;
+    }
+    let own = app
+        .get_webview_window(LABEL)
+        .and_then(|w| w.hwnd().ok())
+        .map(|h| h.0 as isize);
+    if own != Some(fg.0 as isize) {
+        app.state::<Island>().prev_fg.store(fg.0 as isize, SeqCst);
+    }
+}
+
+/// Gives focus back to the window that was active before the island took it.
+pub fn restore_previous_window(app: &AppHandle) {
+    let prev = app.state::<Island>().prev_fg.swap(0, SeqCst);
+    if prev != 0 {
+        unsafe {
+            let _ = SetForegroundWindow(HWND(prev as _));
+        }
+    }
+}
+
+/// Ctrl+Alt+A and similar: open the island straight onto a tab.
+pub fn open_tab(app: &AppHandle, tab: &str) {
+    if !app.state::<Island>().expanded.load(SeqCst) {
+        hotkey(app);
+    }
+    let _ = app.emit("island:goto", tab.to_string());
 }
 
 pub fn on_blur(app: &AppHandle) {
@@ -352,12 +389,15 @@ pub fn start_hover_loop(app: AppHandle) {
 #[serde(rename_all = "camelCase")]
 pub struct IslandInfo {
     expanded: bool,
+    /// opened with the keyboard (so the UI should skip the media "peek" card)
+    held: bool,
 }
 
 #[tauri::command]
 pub fn island_get(st: State<'_, Island>) -> IslandInfo {
     IslandInfo {
         expanded: st.expanded.load(SeqCst),
+        held: st.held.load(SeqCst),
     }
 }
 

@@ -4,16 +4,20 @@ mod apps;
 mod audio;
 mod clipboard;
 mod foreground;
+mod gpu;
+mod hw;
+mod icons;
 mod island;
 mod media;
 mod radio;
 mod stats;
 mod system;
 mod tray;
+mod updater;
 
 use tauri::{Manager, RunEvent, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, ShortcutState};
 
 /// Register "launch at login" automatically the first time an installed build runs.
 /// Set to false if you'd rather users opt in from the tray menu.
@@ -21,6 +25,11 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 const AUTOSTART_BY_DEFAULT: bool = true;
 
 fn main() {
+    let context = tauri::generate_context!();
+    // Updates are only wired up when the build was given updater config (README, "Auto-update").
+    // Dev and local builds skip it, so contributors never need the signing key.
+    let updater_configured = context.config().plugins.0.contains_key("updater");
+
     let builder = tauri::Builder::default();
 
     // Release builds only: starting a second copy (say autostart plus a manual launch)
@@ -32,14 +41,24 @@ fn main() {
         island::hotkey(app);
     }));
 
+    let builder = if updater_configured {
+        builder.plugin(tauri_plugin_updater::Builder::new().build())
+    } else {
+        builder
+    };
+
     let app = builder
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
+                .with_handler(|app, shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        island::hotkey(app);
+                        if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyA) {
+                            island::open_tab(app, "Apps"); // Ctrl+Alt+A: straight to app search
+                        } else {
+                            island::hotkey(app);
+                        }
                     }
                 })
                 .build(),
@@ -48,6 +67,7 @@ fn main() {
         .manage(stats::StatsState::new())
         .manage(clipboard::ClipState::default())
         .manage(apps::AppIndex::default())
+        .manage(updater::UpdaterState::new(updater_configured))
         .invoke_handler(tauri::generate_handler![
             island::island_set_rect,
             island::island_set_expanded,
@@ -70,6 +90,26 @@ fn main() {
             system::open_settings,
             system::wallpaper_set,
             system::power_action,
+            system::wallpaper_get,
+            system::list_images,
+            system::default_wallpapers,
+            stats::top_apps,
+            gpu::gpu_stats,
+            hw::brightness_get,
+            hw::brightness_set,
+            hw::dark_mode_get,
+            hw::dark_mode_set,
+            hw::network_info,
+            audio::audio_device,
+            icons::icons_get,
+            clipboard::clipboard_pin,
+            clipboard::clipboard_remove,
+            clipboard::clipboard_paste,
+            clipboard::clipboard_paste_text,
+            apps::recent_files,
+            updater::update_check,
+            updater::update_install,
+            updater::update_pending,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -86,11 +126,15 @@ fn main() {
             if let Err(e) = app.global_shortcut().register("Ctrl+Alt+Shift+I") {
                 eprintln!("Could not register Ctrl+Alt+Shift+I (already taken?): {e}");
             }
+            if let Err(e) = app.global_shortcut().register("Ctrl+Alt+A") {
+                eprintln!("Could not register Ctrl+Alt+A (already taken?): {e}");
+            }
 
             apps::index_in_background(handle.clone());
             clipboard::start(handle.clone());
             island::start_hover_loop(handle.clone());
             foreground::start(handle.clone());
+            updater::start(handle.clone());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -100,7 +144,7 @@ fn main() {
                 }
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building Windows Island");
 
     app.run(|handle, event| {

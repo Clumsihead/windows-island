@@ -21,7 +21,7 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetClassNameW, GetDesktopWindow, GetSystemMetrics, GetWindow, GetWindowLongPtrW, GetWindowRect,
-    GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible, GWL_EXSTYLE, GW_CHILD,
+    GetWindowTextLengthW, GetWindowThreadProcessId, GetForegroundWindow, IsIconic, IsWindowVisible, GWL_EXSTYLE, GW_CHILD,
     GW_HWNDNEXT, SM_CXSCREEN, SM_CYSCREEN, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 
@@ -168,6 +168,23 @@ fn find_blocker() -> Option<String> {
     None
 }
 
+/// Remembers the last real window that was in front (not the island, not WebView2's
+/// helper windows) so "paste" can hand focus back to it even after you clicked the island.
+fn record_foreground(app: &AppHandle, last: &mut isize) {
+    let fg = unsafe { GetForegroundWindow() };
+    let raw = fg.0 as isize;
+    if raw == 0 || raw == *last {
+        return;
+    }
+    *last = raw;
+    let mut pid = 0u32;
+    unsafe { GetWindowThreadProcessId(fg, Some(&mut pid)) };
+    if pid == std::process::id() || exe_of(pid).eq_ignore_ascii_case("msedgewebview2.exe") {
+        return;
+    }
+    app.state::<Island>().prev_fg.store(raw, SeqCst);
+}
+
 pub fn start(app: AppHandle) {
     let running = app.state::<Island>().foreground_running.clone();
     let spawned = std::thread::Builder::new()
@@ -175,8 +192,10 @@ pub fn start(app: AppHandle) {
         .spawn(move || {
             let mut committed: Option<bool> = None;
             let mut pending: Option<(bool, u32)> = None;
+            let mut last_fg: isize = 0;
 
             while running.load(SeqCst) {
+                record_foreground(&app, &mut last_fg);
                 let blocker = find_blocker();
                 let desktop = blocker.is_none();
                 let fast = FAST.swap(false, SeqCst);

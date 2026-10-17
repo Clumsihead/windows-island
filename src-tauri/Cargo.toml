@@ -8,6 +8,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-updater = { version = "=2.12.0", default-features = false, features = ["rustls-tls", "system-proxy"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
@@ -17,6 +18,7 @@ serde_json = "1"
 sysinfo = "0.33"
 arboard = "3"
 base64 = "0.22"
+png = "0.17"
 
 [dependencies.windows]
 version = "0.61"
@@ -41,6 +43,11 @@ features = [
   "Win32_UI_Shell_PropertiesSystem",
   "Win32_UI_WindowsAndMessaging",
   "Win32_Graphics_Dwm",
+  "Networking_Connectivity", 
+  "Media_Devices", 
+  "Devices_Enumeration", 
+  "Storage", 
+  "Storage_FileProperties",
 ]
 
 [profile.release]

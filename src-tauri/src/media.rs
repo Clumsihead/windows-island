@@ -20,6 +20,19 @@ pub struct MediaInfo {
     /// seconds
     position: f64,
     duration: f64,
+    /// The app playing it, e.g. "Spotify" or "Brave"
+    app: String,
+}
+
+fn pretty_app(id: &str) -> String {
+    let last = id.rsplit(['\\', '!', '/']).next().unwrap_or(id);
+    let last = last.trim_end_matches(".exe");
+    let last = last.rsplit('.').next().unwrap_or(last).replace(['-', '_'], " ");
+    let mut chars = last.chars();
+    match chars.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
+        None => last,
+    }
 }
 
 fn current() -> windows::core::Result<Session> {
@@ -43,15 +56,14 @@ fn read() -> windows::core::Result<MediaInfo> {
         playing,
         position,
         duration,
+        app: s.SourceAppUserModelId().map(|h| pretty_app(&h.to_string())).unwrap_or_default(),
     })
 }
 
 fn read_art() -> windows::core::Result<Option<String>> {
     let s = current()?;
     let props = s.TryGetMediaPropertiesAsync()?.get()?;
-    let Ok(thumb) = props.Thumbnail() else {
-        return Ok(None);
-    };
+    let Ok(thumb) = props.Thumbnail() else { return Ok(None) };
     let stream = thumb.OpenReadAsync()?.get()?;
     let size = stream.Size()? as u32;
     if size == 0 || size > 6_000_000 {
@@ -61,26 +73,16 @@ fn read_art() -> windows::core::Result<Option<String>> {
     reader.LoadAsync(size)?.get()?;
     let mut buf = vec![0u8; size as usize];
     reader.ReadBytes(&mut buf)?;
-    let mime = if buf.starts_with(&[0x89, b'P', b'N', b'G']) {
-        "image/png"
-    } else {
-        "image/jpeg"
-    };
+    let mime = if buf.starts_with(&[0x89, b'P', b'N', b'G']) { "image/png" } else { "image/jpeg" };
     Ok(Some(format!("data:{mime};base64,{}", B64.encode(buf))))
 }
 
 fn control(action: &str) -> windows::core::Result<()> {
     let s = current()?;
     match action {
-        "toggle" => {
-            s.TryTogglePlayPauseAsync()?.get()?;
-        }
-        "next" => {
-            s.TrySkipNextAsync()?.get()?;
-        }
-        "prev" => {
-            s.TrySkipPreviousAsync()?.get()?;
-        }
+        "toggle" => { s.TryTogglePlayPauseAsync()?.get()?; }
+        "next" => { s.TrySkipNextAsync()?.get()?; }
+        "prev" => { s.TrySkipPreviousAsync()?.get()?; }
         _ => {}
     }
     Ok(())
@@ -89,18 +91,13 @@ fn control(action: &str) -> windows::core::Result<()> {
 // WinRT's blocking .get() must stay off the async runtime's workers, hence spawn_blocking.
 #[tauri::command]
 pub async fn media_get() -> MediaInfo {
-    tauri::async_runtime::spawn_blocking(|| read().unwrap_or_default())
-        .await
-        .unwrap_or_default()
+    tauri::async_runtime::spawn_blocking(|| read().unwrap_or_default()).await.unwrap_or_default()
 }
 
 /// Fetched separately and only when the track changes (it's big).
 #[tauri::command]
 pub async fn media_art() -> Option<String> {
-    tauri::async_runtime::spawn_blocking(|| read_art().ok().flatten())
-        .await
-        .ok()
-        .flatten()
+    tauri::async_runtime::spawn_blocking(|| read_art().ok().flatten()).await.ok().flatten()
 }
 
 #[tauri::command]

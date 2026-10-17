@@ -1,138 +1,125 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  Bluetooth, Cpu, ExternalLink, HardDrive, MemoryStick, Moon, Pause, Play, SkipBack, SkipForward,
-  Sun, Volume2, VolumeX, Wifi, Music2,
-} from "lucide-react";
-import { api, Audio, Radios } from "../api";
-import { mmss, usePoll } from "../hooks";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Bluetooth, ChevronDown, Contrast, Moon, Sun, Volume2, VolumeX, Wifi } from "lucide-react";
+import { api, Audio, Media, NetInfo, Radios } from "../api";
+import { usePoll } from "../hooks";
+import { PillSlider } from "../ui";
+import MediaCard from "../media";
 import type { TabProps } from "../App";
 
-export default function Controls({ flash, stats, media, art }: TabProps) {
+function Tile({
+  icon, title, sub, active, onMain, onMore,
+}: { icon: ReactNode; title: string; sub: string; active: boolean; onMain: () => void; onMore?: () => void }) {
+  return (
+    <div className={`qtile ${active ? "on" : ""}`}>
+      <button className="qtile-main" onClick={onMain}>
+        <span className="qtile-ico">{icon}</span>
+        <span className="qtile-text">
+          <b>{title}</b>
+          <small>{sub}</small>
+        </span>
+      </button>
+      {onMore && (
+        <>
+          <i className="qtile-sep" />
+          <button className="qtile-more" onClick={onMore} aria-label={`${title} settings`}>
+            <ChevronDown size={18} />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function Controls({ flash, media, art }: TabProps & { media: Media; art: string | null }) {
   const audio = usePoll<Audio | null>(api.audio, 700, null);
+  const device = usePoll<string | null>(api.audioDevice, 4000, null);
+  const net = usePoll<NetInfo>(api.netInfo, 5000, { kind: "", name: "" });
   const [radios, setRadios] = useState<Radios>({ wifi: null, bluetooth: null });
+  const [dark, setDark] = useState(false);
   const [vol, setVol] = useState(0);
-  const dragging = useRef(false);
+  const [bright, setBright] = useState<number | null>(null);
+  const draggingVol = useRef(false);
+  const brightTimer = useRef<number | undefined>(undefined);
 
   const refreshRadios = () => api.radios().then(setRadios).catch(() => {});
   useEffect(() => {
     refreshRadios();
+    api.darkGet().then(setDark).catch(() => {});
+    api.brightnessGet().then(setBright).catch(() => setBright(null));
   }, []);
   useEffect(() => {
-    if (audio && !dragging.current) setVol(Math.round(audio.volume * 100));
+    if (audio && !draggingVol.current) setVol(Math.round(audio.volume * 100));
   }, [audio]);
+
+  const open = (page: string) => api.openSettings(page).catch((e) => flash(String(e)));
 
   const toggleRadio = async (kind: "wifi" | "bluetooth") => {
     const cur = radios[kind];
-    if (cur === null) return api.openSettings(kind).catch((e) => flash(String(e)));
+    if (cur === null) return open(kind);
     setRadios({ ...radios, [kind]: !cur }); // optimistic
     try {
       await api.setRadio(kind, !cur);
     } catch {
-      // Windows refused (permissions / policy): send them to the real settings page.
       setRadios({ ...radios, [kind]: cur });
-      flash("Windows blocked the switch — opening Settings");
-      api.openSettings(kind).catch(() => {});
+      flash("Windows blocked the switch, opening Settings");
+      open(kind);
     }
     refreshRadios();
   };
 
-  const open = (page: string) => api.openSettings(page).catch((e) => flash(String(e)));
-  const ramPct = stats ? Math.round((stats.ramUsed / stats.ramTotal) * 100) : null;
-  const diskPct = stats?.disks[0] ? Math.round((stats.disks[0].used / stats.disks[0].size) * 100) : null;
+  const toggleDark = () => {
+    const next = !dark;
+    setDark(next);
+    api.darkSet(next).catch(() => {
+      setDark(!next);
+      flash("Couldn't change the theme");
+    });
+  };
+
+  const setBrightness = (v: number) => {
+    setBright(v);
+    window.clearTimeout(brightTimer.current);
+    brightTimer.current = window.setTimeout(() => {
+      api.brightnessSet(v).catch(() => flash("Brightness isn't supported on this display"));
+    }, 150);
+  };
+
+  const wifiSub =
+    radios.wifi === null ? "Not available" : radios.wifi === false ? "Off" : net.kind === "wifi" ? net.name : "Not connected";
 
   return (
     <div className="controls">
-      <MediaCard media={media} art={art} />
-
-      <div className="tiles">
-        <Tile icon={<Wifi size={17} />} label="Wi-Fi" sub={radios.wifi === null ? "Settings" : radios.wifi ? "On" : "Off"} active={!!radios.wifi} onClick={() => toggleRadio("wifi")} />
-        <Tile icon={<Bluetooth size={17} />} label="Bluetooth" sub={radios.bluetooth === null ? "Settings" : radios.bluetooth ? "On" : "Off"} active={!!radios.bluetooth} onClick={() => toggleRadio("bluetooth")} />
-        <Tile icon={audio?.muted ? <VolumeX size={17} /> : <Volume2 size={17} />} label="Mute" sub={audio?.muted ? "Muted" : "Sound on"} active={!!audio?.muted} onClick={() => api.toggleMute()} />
-        <Tile icon={<Moon size={17} />} label="Night Light" sub="Settings" active={false} onClick={() => open("nightlight")} />
+      <div className="grid3">
+        <Tile icon={<Wifi size={20} />} title="Wi-Fi" sub={wifiSub} active={radios.wifi === true}
+          onMain={() => toggleRadio("wifi")} onMore={() => open("wifi")} />
+        <Tile icon={<Bluetooth size={20} />} title="Bluetooth"
+          sub={radios.bluetooth === null ? "Not available" : radios.bluetooth ? "On" : "Off"}
+          active={radios.bluetooth === true} onMain={() => toggleRadio("bluetooth")} onMore={() => open("bluetooth")} />
+        <Tile icon={audio?.muted ? <VolumeX size={20} /> : <Volume2 size={20} />} title="Audio"
+          sub={device ?? (audio?.muted ? "Muted" : "Output")} active={!audio?.muted}
+          onMain={() => api.toggleMute()} onMore={() => open("sound")} />
+      </div>
+      <div className="grid2">
+        <Tile icon={<Moon size={20} />} title="Night Light" sub="Open settings" active={false}
+          onMain={() => open("nightlight")} onMore={() => open("nightlight")} />
+        <Tile icon={<Contrast size={20} />} title="Dark mode" sub={dark ? "On" : "Off"} active={dark} onMain={toggleDark} />
       </div>
 
-      <div className="card slider-row">
-        {audio?.muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-        <input
-          type="range" min={0} max={100} value={vol} className="slider" aria-label="Volume"
-          style={{ ["--fill" as string]: `${vol}%` }}
-          onPointerDown={() => (dragging.current = true)}
-          onPointerUp={() => (dragging.current = false)}
-          onChange={(e) => {
-            const v = Number(e.target.value);
-            setVol(v);
-            api.setVolume(v / 100).catch(() => {});
-          }}
-        />
-        <b>{vol}</b>
-      </div>
+      <PillSlider
+        label="Volume" icon={audio?.muted ? <VolumeX size={18} /> : <Volume2 size={18} />} value={vol}
+        onChange={(v) => {
+          draggingVol.current = true;
+          setVol(v);
+          api.setVolume(v / 100).catch(() => {});
+          window.setTimeout(() => (draggingVol.current = false), 600);
+        }}
+      />
+      <PillSlider
+        label="Brightness" icon={<Sun size={18} />} value={bright ?? 0} disabled={bright === null}
+        hint={bright === null ? "Brightness control works on laptop screens" : undefined} onChange={setBrightness}
+      />
 
-      <button className="row-link" onClick={() => open("display")}>
-        <span><Sun size={14} /> Display &amp; brightness</span>
-        <ExternalLink size={13} />
-      </button>
-
-      <div className="mini-stats">
-        <Mini icon={<Cpu />} label="CPU" value={stats ? `${Math.round(stats.cpu)}%` : "—"} />
-        <Mini icon={<MemoryStick />} label="RAM" value={ramPct === null ? "—" : `${ramPct}%`} />
-        <Mini icon={<HardDrive />} label="DISK" value={diskPct === null ? "—" : `${diskPct}%`} />
-      </div>
-    </div>
-  );
-}
-
-function MediaCard({ media, art }: { media: TabProps["media"]; art: string | null }) {
-  // Interpolate between polls so the progress bar moves smoothly.
-  const [tick, setTick] = useState(0);
-  const stamp = useRef(performance.now());
-  useEffect(() => {
-    stamp.current = performance.now();
-  }, [media]);
-  useEffect(() => {
-    if (!media.playing) return;
-    const id = setInterval(() => setTick((t) => t + 1), 500);
-    return () => clearInterval(id);
-  }, [media.playing]);
-  void tick;
-
-  const pos = media.playing ? media.position + (performance.now() - stamp.current) / 1000 : media.position;
-  const pct = media.duration > 0 ? Math.min(100, (pos / media.duration) * 100) : 0;
-
-  return (
-    <div className="card media-card">
-      <div className="art">{art ? <img src={art} alt="" /> : <Music2 size={22} />}</div>
-      <div className="media-body">
-        <div className="media-title">{media.available ? media.title || "Unknown track" : "Nothing playing"}</div>
-        <div className="media-artist">{media.available ? media.artist || "—" : "Play something in any media app"}</div>
-        <div className="progress"><i style={{ width: `${pct}%` }} /></div>
-        <div className="times"><span>{mmss(pos)}</span><span>{media.duration > 0 ? mmss(media.duration) : ""}</span></div>
-      </div>
-      <div className="media-controls">
-        <button onClick={() => api.mediaControl("prev")} aria-label="Previous"><SkipBack size={16} /></button>
-        <button className="play" onClick={() => api.mediaControl("toggle")} aria-label="Play or pause">
-          {media.playing ? <Pause size={18} /> : <Play size={18} />}
-        </button>
-        <button onClick={() => api.mediaControl("next")} aria-label="Next"><SkipForward size={16} /></button>
-      </div>
-    </div>
-  );
-}
-
-function Tile({ icon, label, sub, active, onClick }: { icon: React.ReactNode; label: string; sub: string; active: boolean; onClick: () => void }) {
-  return (
-    <button className={`tile ${active ? "active" : ""}`} onClick={onClick}>
-      {icon}
-      <span><b>{label}</b><small>{sub}</small></span>
-    </button>
-  );
-}
-
-function Mini({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="mini">
-      {icon}
-      <span>{label}</span>
-      <b>{value}</b>
+      <MediaCard media={media} art={art} device={device} layout="wide" />
     </div>
   );
 }

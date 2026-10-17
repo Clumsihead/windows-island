@@ -1,16 +1,19 @@
 /**
- * Drives the island's width / height / corner radius with a damped spring.
- * It writes straight to the element's style (no React re-render per frame) and the
- * window itself never resizes, so the morph is just one small box being repainted.
+ * Drives the island's width / height / corner radius / "ear" size with a damped spring.
+ * It writes straight to the element (no React re-render per frame) and the window itself
+ * never resizes, so the morph is one box being repainted.
+ *
+ * `e` is the size of the concave fillets where the island meets the top edge of the screen.
  */
-export type Box = { w: number; h: number; r: number };
+export type Box = { w: number; h: number; r: number; e: number };
 export type SpringCfg = { k: number; c: number };
 
-const KEYS = ["w", "h", "r"] as const;
+const KEYS = ["w", "h", "r", "e"] as const;
+const ZERO: Box = { w: 0, h: 0, r: 0, e: 0 };
 
 export class SpringBox {
   private cur: Box;
-  private vel: Box = { w: 0, h: 0, r: 0 };
+  private vel: Box = { ...ZERO };
   private target: Box;
   private cfg: SpringCfg = { k: 300, c: 28 };
   private raf = 0;
@@ -29,7 +32,7 @@ export class SpringBox {
       cancelAnimationFrame(this.raf);
       this.raf = 0;
       this.cur = { ...target };
-      this.vel = { w: 0, h: 0, r: 0 };
+      this.vel = { ...ZERO };
       this.paint();
       return;
     }
@@ -55,7 +58,7 @@ export class SpringBox {
     const settled = KEYS.every((k) => Math.abs(this.cur[k] - this.target[k]) < 0.05 && Math.abs(this.vel[k]) < 0.5);
     if (settled) {
       this.cur = { ...this.target };
-      this.vel = { w: 0, h: 0, r: 0 };
+      this.vel = { ...ZERO };
       this.paint();
       this.raf = 0;
     } else {
@@ -64,12 +67,12 @@ export class SpringBox {
   };
 
   private paint() {
-    const { w, h, r } = this.cur;
+    const { w, h, r, e } = this.cur;
     const s = this.el.style;
     s.width = `${Math.max(0, w)}px`;
     s.height = `${Math.max(0, h)}px`;
-    const rr = `${Math.max(0, r)}px`;
-    s.borderRadius = `0 0 ${rr} ${rr}`;
+    s.setProperty("--r", `${Math.max(0, r)}px`);
+    s.setProperty("--ear", `${Math.max(0, e)}px`);
   }
 
   destroy() {
@@ -78,6 +81,6 @@ export class SpringBox {
 }
 
 // Slight overshoot opening, critically damped closing (so it never bounces into the screen edge).
-export const OPEN: SpringCfg = { k: 260, c: 23 };
-export const RETAB: SpringCfg = { k: 300, c: 30 };
+export const OPEN: SpringCfg = { k: 240, c: 24 };
+export const RETAB: SpringCfg = { k: 300, c: 31 };
 export const CLOSE: SpringCfg = { k: 380, c: 39 };

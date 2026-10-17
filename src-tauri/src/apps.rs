@@ -25,29 +25,18 @@ pub struct AppIndex {
 const BUILTIN: [&str; 4] = ["ms-settings:", "explorer.exe", "taskmgr.exe", "calc.exe"];
 
 fn walk(dir: &Path, out: &mut Vec<AppEntry>, seen: &mut HashSet<String>) {
-    let Ok(rd) = std::fs::read_dir(dir) else {
-        return;
-    };
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
     for e in rd.flatten() {
         let p = e.path();
         if p.is_dir() {
             walk(&p, out, seen);
-        } else if p
-            .extension()
-            .map(|x| x.eq_ignore_ascii_case("lnk"))
-            .unwrap_or(false)
-        {
-            let Some(name) = p.file_stem().map(|s| s.to_string_lossy().to_string()) else {
-                continue;
-            };
+        } else if p.extension().map(|x| x.eq_ignore_ascii_case("lnk")).unwrap_or(false) {
+            let Some(name) = p.file_stem().map(|s| s.to_string_lossy().to_string()) else { continue };
             let lower = name.to_lowercase();
             if lower.contains("uninstall") || !seen.insert(lower) {
                 continue;
             }
-            out.push(AppEntry {
-                name,
-                path: p.to_string_lossy().to_string(),
-            });
+            out.push(AppEntry { name, path: p.to_string_lossy().to_string() });
         }
     }
 }
@@ -77,16 +66,7 @@ pub fn index_in_background(app: AppHandle) {
 
 pub fn shell_open(target: &str) -> Result<(), String> {
     let t = HSTRING::from(target);
-    let r = unsafe {
-        ShellExecuteW(
-            None,
-            w!("open"),
-            &t,
-            PCWSTR::null(),
-            PCWSTR::null(),
-            SW_SHOWNORMAL,
-        )
-    };
+    let r = unsafe { ShellExecuteW(None, w!("open"), &t, PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
     if r.0 as isize > 32 {
         Ok(())
     } else {
@@ -106,9 +86,41 @@ pub fn apps_list(state: State<'_, AppIndex>) -> Vec<AppEntry> {
 #[tauri::command]
 pub fn apps_launch(path: String, state: State<'_, AppIndex>) -> Result<(), String> {
     let known = BUILTIN.contains(&path.as_str())
-        || state.list.lock().unwrap().iter().any(|a| a.path == path);
+        || state.list.lock().unwrap().iter().any(|a| a.path == path)
+        || is_recent_shortcut(&path);
     if !known {
         return Err("That app isn't in the index".into());
     }
     shell_open(&path)
+}
+
+fn recent_dir() -> Option<PathBuf> {
+    std::env::var("APPDATA").ok().map(|p| PathBuf::from(p).join(r"Microsoft\Windows\Recent"))
+}
+
+fn is_recent_shortcut(path: &str) -> bool {
+    let Some(dir) = recent_dir() else { return false };
+    let p = Path::new(path);
+    p.starts_with(&dir) && p.extension().map(|e| e.eq_ignore_ascii_case("lnk")).unwrap_or(false)
+}
+
+/// Files you opened recently (Windows' own Recent folder), newest first.
+#[tauri::command(async)]
+pub fn recent_files() -> Vec<AppEntry> {
+    let Some(dir) = recent_dir() else { return vec![] };
+    let Ok(rd) = std::fs::read_dir(&dir) else { return vec![] };
+    let mut found: Vec<(std::time::SystemTime, AppEntry)> = rd
+        .flatten()
+        .filter_map(|e| {
+            let p = e.path();
+            if !p.extension()?.eq_ignore_ascii_case("lnk") {
+                return None;
+            }
+            let when = e.metadata().ok()?.modified().ok()?;
+            let name = p.file_stem()?.to_string_lossy().to_string();
+            Some((when, AppEntry { name, path: p.to_string_lossy().to_string() }))
+        })
+        .collect();
+    found.sort_by(|a, b| b.0.cmp(&a.0));
+    found.into_iter().take(40).map(|(_, a)| a).collect()
 }
