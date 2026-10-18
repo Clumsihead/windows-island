@@ -1,9 +1,9 @@
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
-use crate::{island, updater};
+use crate::{island, settings, updater};
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let st = app.state::<updater::UpdaterState>();
@@ -46,11 +46,25 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         app.autolaunch().is_enabled().unwrap_or(false),
         None::<&str>,
     )?;
+    let size_now = app.state::<settings::SettingsState>().current.lock().unwrap().size.clone();
+    let mut size_items: Vec<(String, CheckMenuItem<tauri::Wry>)> = Vec::new();
+    for (key, label) in [("small", "Small"), ("medium", "Medium"), ("large", "Large")] {
+        let item = CheckMenuItem::with_id(app, format!("size_{key}"), label, true, key == size_now, None::<&str>)?;
+        size_items.push((key.to_string(), item));
+    }
+    let size_menu = Submenu::with_items(
+        app,
+        "Island size",
+        true,
+        &[&size_items[0].1, &size_items[1].1, &size_items[2].1],
+    )?;
+    *app.state::<settings::SettingsState>().menu.lock().unwrap() = size_items;
+
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
-        &[&version, &sep_top, &toggle, &desktop, &autostart, &updates, &sep, &quit],
+        &[&version, &sep_top, &toggle, &desktop, &autostart, &size_menu, &updates, &sep, &quit],
     )?;
 
     let desktop_item = desktop.clone();
@@ -81,6 +95,15 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
                 tauri::async_runtime::spawn(async move {
                     updater::on_tray_click(app).await;
                 });
+            }
+            "size_small" => {
+                let _ = settings::set_size(app, "small");
+            }
+            "size_medium" => {
+                let _ = settings::set_size(app, "medium");
+            }
+            "size_large" => {
+                let _ = settings::set_size(app, "large");
             }
             "quit" => app.exit(0),
             _ => {}

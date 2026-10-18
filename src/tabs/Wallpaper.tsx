@@ -32,15 +32,20 @@ export default function Wallpaper({ flash }: TabProps) {
 
   useEffect(() => setSel(0), [source]);
   const n = items.length;
-  const visible = useMemo(() => {
-    if (n === 0) return [];
-    if (n < 5) return items.map((p, i) => ({ p, i, o: i - sel })).filter((v) => Math.abs(v.o) <= 2);
-    return [-2, -1, 0, 1, 2].map((o) => {
-      const i = (((sel + o) % n) + n) % n; // wraps around
-      return { p: items[i], i, o };
-    });
-  }, [items, sel, n]);
-  const thumb = useIcons(visible.map((v) => v.p), 640);
+  // With enough pictures the strip wraps around: the one that leaves on the left comes back on the right.
+  // (needs a spare slot, so six or more: otherwise one picture would visibly jump from one end to the other)
+  const wrap = n >= 6;
+  const half = Math.floor(n / 2);
+  // Pictures up to 4 slots away stay in the page. One that is about to appear starts at width 0 and
+  // grows (one that leaves shrinks to nothing) instead of popping in and out.
+  const rendered = useMemo(
+    () =>
+      items
+        .map((p, i) => ({ p, i, o: wrap ? ((((i - sel + half) % n) + n) % n) - half : i - sel }))
+        .filter((v) => Math.abs(v.o) <= 4),
+    [items, sel, n, wrap, half]
+  );
+  const thumb = useIcons(rendered.filter((v) => Math.abs(v.o) <= 3).map((v) => v.p), 640);
 
   const apply = (path: string) =>
     api.setWallpaper(path).then(() => {
@@ -65,10 +70,10 @@ export default function Wallpaper({ flash }: TabProps) {
 
   const onWheel = (e: React.WheelEvent) => {
     const now = performance.now();
-    if (now - wheelLock.current < 140) return;
+    if (now - wheelLock.current < 220) return;
     wheelLock.current = now;
     const dir = e.deltaY > 0 || e.deltaX > 0 ? 1 : -1;
-    setSel((s) => (n >= 5 ? (s + dir + n) % n : Math.max(0, Math.min(n - 1, s + dir))));
+    setSel((s) => (wrap ? (s + dir + n) % n : Math.max(0, Math.min(n - 1, s + dir))));
   };
 
   return (
@@ -82,12 +87,15 @@ export default function Wallpaper({ flash }: TabProps) {
       </div>
 
       <div className="wall-strip" onWheel={onWheel}>
-        {visible.map(({ p, i, o }) => {
-          const src = thumb(p);
+        {rendered.map(({ p, i, o }) => {
+          const kind = o === 0 ? "center" : Math.abs(o) <= 2 ? "side" : "hid";
+          const src = Math.abs(o) <= 3 ? thumb(p) : undefined;
           return (
             <button
               key={p}
-              className={`wall-item ${o === 0 ? "center" : "side"} ${p === current ? "current" : ""}`}
+              className={`wall-item ${kind} ${p === current ? "current" : ""}`}
+              style={{ order: o }}
+              tabIndex={kind === "hid" ? -1 : 0}
               onClick={() => (o === 0 ? apply(p) : setSel(i))}
               title={o === 0 ? "Click to set as wallpaper" : undefined}
             >

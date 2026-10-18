@@ -17,6 +17,7 @@
   --lime: #7fd321;
   --orange: #f5a623;
   --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-io: cubic-bezier(0.65, 0, 0.35, 1); /* slow start, fast middle, slow finish */
   font-family: "Rubik", "Segoe UI", system-ui, sans-serif;
   color: var(--text);
   font-synthesis: none;
@@ -31,7 +32,8 @@ input:focus-visible { outline: none; }
 b { font-weight: 500; }
 small { font-size: 12.5px; color: var(--muted); }
 :focus-visible { outline: 2px solid var(--olive); outline-offset: 2px; }
-.stage { position: relative; width: 100%; height: 100%; user-select: none; }
+/* A fixed-size canvas, scaled to fit the (smaller or larger) window. The window is resized to match. */
+.stage { position: absolute; left: 0; top: 0; width: 1320px; height: 760px; transform-origin: 0 0; transform: scale(var(--ui, 1)); user-select: none; }
 
 /* ============ the notch: one box, concave "ears" where it meets the top of the screen ============ */
 .island {
@@ -80,10 +82,11 @@ small { font-size: 12.5px; color: var(--muted); }
 /* ============ tabs ============ */
 .topbar { position: absolute; top: 0; left: 0; right: 0; height: 64px; display: flex; justify-content: center; align-items: flex-start; padding-top: 16px; }
 .tabs { display: flex; gap: 6px; }
-.tab { padding: 8px 17px; border-radius: 999px; color: #8f8c7d; font-size: 14.5px; transition: background 180ms, color 180ms; }
+.tab { padding: 8px 15px; border-radius: 999px; color: #8f8c7d; font-size: 14.5px; transition: background 180ms, color 180ms; }
 .tab:hover { color: var(--text); }
 .tab.on { background: #2b2910; color: #d9d06a; }
-.update-btn { position: absolute; right: 24px; top: 19px; padding: 6px 13px; border-radius: 999px; background: var(--olive); color: var(--on-olive); font-size: 12px; font-weight: 600; }
+.update-btn { padding: 8px 18px; border-radius: 999px; background: var(--olive); color: var(--on-olive); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.tdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--olive); margin-left: 7px; vertical-align: middle; box-shadow: 0 0 6px var(--olive); }
 .update-btn:disabled { opacity: 0.75; cursor: default; }
 .content { position: absolute; left: 0; right: 0; top: 64px; bottom: 0; padding: 8px 24px 24px; animation: content-in 240ms var(--ease) both; }
 @keyframes content-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -306,8 +309,10 @@ small { font-size: 12.5px; color: var(--muted); }
 .pillbtn.on { background: var(--olive); color: var(--on-olive); }
 .round-btn { margin-left: auto; width: 44px; height: 44px; border-radius: 50%; background: var(--card); display: grid; place-items: center; color: var(--text); }
 .round-btn:hover { background: var(--card3); }
-.wall-strip { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 12px; }
-.wall-item { position: relative; height: 204px; width: 82px; flex: none; border-radius: 26px; overflow: hidden; background: var(--card); transform: skewX(-8deg); transition: width 320ms var(--ease), height 320ms var(--ease), opacity 200ms; opacity: 0.9; }
+.wall-strip { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.wall-item { position: relative; height: 204px; width: 82px; flex: none; border-radius: 26px; overflow: hidden; background: var(--card); transform: skewX(-8deg); margin: 0 6px; opacity: 0.9;
+  transition: width 560ms var(--ease-io), height 560ms var(--ease-io), margin 560ms var(--ease-io), opacity 380ms ease; }
+.wall-item.hid { width: 0; margin: 0; opacity: 0; pointer-events: none; }
 .wall-item.center { width: 440px; height: 100%; opacity: 1; box-shadow: 0 8px 30px #0009; }
 .wall-item.current::after { content: "Current"; position: absolute; left: 22px; bottom: 14px; transform: skewX(8deg); padding: 4px 10px; border-radius: 10px; background: #000a; font-size: 12px; }
 .wall-item:not(.center):hover { opacity: 1; }
@@ -316,11 +321,25 @@ small { font-size: 12.5px; color: var(--muted); }
 
 /* ============ power ============ */
 .power { height: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.seg { display: flex; gap: 6px; }
+.seg button { padding: 9px 22px; border-radius: 22px; font-size: 14px; font-weight: 500; color: #cfccbc; transition: background 160ms; }
+.seg button:hover { background: #ffffff0c; }
+.seg button.on { background: var(--olive); color: var(--on-olive); }
 .ptile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; border-radius: 28px; background: var(--card); text-align: center; transition: background 200ms, border-radius 260ms var(--ease); padding: 0 8px; }
 .ptile:hover { background: var(--card2); border-radius: 36px; }
 .ptile b { font-size: 15px; font-weight: 600; }
 .ptile.danger svg { color: #f2b8b5; }
 .ptile.armed { background: #3a2a22; }
+
+/* ============ settings ============ */
+.settings { height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px; scrollbar-width: thin; scrollbar-color: #45413a transparent; }
+.sgroup { background: var(--card); border-radius: 26px; padding: 4px 10px 8px; flex: none; }
+.sgroup h4 { font-size: 12px; font-weight: 400; letter-spacing: 0.7px; color: var(--muted); padding: 14px 14px 6px; }
+.srow { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 54px; padding: 4px 6px 4px 14px; font-size: 15px; }
+.srow + .srow { border-top: 1px solid #ffffff0d; }
+.srow > div > small { display: block; margin-top: 2px; }
+.srow kbd { font: inherit; font-size: 13px; background: var(--card3); padding: 5px 12px; border-radius: 9px; white-space: nowrap; }
+.srow.tight { min-height: 44px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

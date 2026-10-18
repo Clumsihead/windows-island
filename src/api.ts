@@ -41,6 +41,8 @@ export type Clip = {
 };
 export type AppEntry = { name: string; path: string };
 export type UpdateInfo = { version: string; notes: string | null };
+export type SizeKey = "small" | "medium" | "large";
+export type Settings = { size: SizeKey };
 
 export const EMPTY_MEDIA: Media = {
   available: false, title: "", artist: "", playing: false, position: 0, duration: 0, app: "",
@@ -51,6 +53,9 @@ export const api = {
   setRect: (r: { x: number; y: number; w: number; h: number }) => invoke("island_set_rect", r),
   setExpanded: (expanded: boolean) => invoke("island_set_expanded", { expanded }),
   setPinned: (pinned: boolean) => invoke("island_set_pinned", { pinned }),
+  setScale: (scale: number) => invoke("island_set_scale", { scale }),
+  getSettings: () => invoke<Settings>("settings_get"),
+  setIslandSize: (size: SizeKey) => invoke("set_island_size", { size }),
   getIsland: () => invoke<{ expanded: boolean; held: boolean }>("island_get"),
   // system
   stats: () => invoke<Stats>("system_stats"),
@@ -99,6 +104,7 @@ export const api = {
 };
 
 export const onExpanded = (cb: (v: boolean) => void) => listen<boolean>("island:expanded", (e) => cb(e.payload));
+export const onSettings = (cb: (s: Settings) => void) => listen<Settings>("settings:changed", (e) => cb(e.payload));
 export const onGoto = (cb: (tab: string) => void) => listen<string>("island:goto", (e) => cb(e.payload));
 export const onClips = (cb: (c: Clip[]) => void) => listen<Clip[]>("clipboard:changed", (e) => cb(e.payload));
 export const onUpdate = (cb: (u: UpdateInfo) => void) => listen<UpdateInfo>("update:available", (e) => cb(e.payload));

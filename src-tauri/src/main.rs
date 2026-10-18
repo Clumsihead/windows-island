@@ -10,6 +10,7 @@ mod icons;
 mod island;
 mod media;
 mod radio;
+mod settings;
 mod stats;
 mod system;
 mod tray;
@@ -68,10 +69,14 @@ fn main() {
         .manage(clipboard::ClipState::default())
         .manage(apps::AppIndex::default())
         .manage(updater::UpdaterState::new(updater_configured))
+        .manage(settings::SettingsState::default())
         .invoke_handler(tauri::generate_handler![
             island::island_set_rect,
             island::island_set_expanded,
             island::island_set_pinned,
+            island::island_set_scale,
+            settings::settings_get,
+            settings::set_island_size,
             island::island_get,
             stats::system_stats,
             media::media_get,
@@ -118,6 +123,7 @@ fn main() {
                 .ok_or("island window missing from tauri.conf.json")?;
 
             island::prepare(&win)?;
+            settings::load(&handle);
             tray::build(&handle)?;
 
             #[cfg(not(debug_assertions))]

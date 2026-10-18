@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { ChevronDown, Music2 } from "lucide-react";
 import {
-  api, onExpanded, onGoto, onUpdate, onUpdateProgress, EMPTY_MEDIA, Media, UpdateInfo,
+  api, onExpanded, onGoto, onSettings, onUpdate, onUpdateProgress, EMPTY_MEDIA, Media, SizeKey, UpdateInfo,
 } from "./api";
 import { usePoll, useClock, useHour24, formatTime, mmss } from "./hooks";
 import { useTimer } from "./timer";
@@ -14,20 +14,29 @@ import ClipboardTab from "./tabs/ClipboardTab";
 import Apps from "./tabs/Apps";
 import Wallpaper from "./tabs/Wallpaper";
 import PowerTab from "./tabs/PowerTab";
+import SettingsTab from "./tabs/SettingsTab";
 
-// Keep in sync with "width" / "height" in src-tauri/tauri.conf.json (logical px).
-export const WIN_W = 1320;
+// Layout size at scale 1.0 (logical px). Keep in sync with "width" / "height" in
+// src-tauri/tauri.conf.json and BASE_W / BASE_H in src-tauri/src/island.rs.
+export const BASE_W = 1320;
 
-export type Tab = "Controls" | "Today" | "Stats" | "Clipboard" | "Apps" | "Wallpaper" | "Power";
+// Island size presets. They describe how big the island *looks on screen*, whatever Windows'
+// display scaling is: 1.0 is about 960 physical px wide for the Controls tab. The design is
+// drawn for 125% display scaling (REF_DPR), so other scales are compensated for automatically.
+const SIZE_FACTOR: Record<SizeKey, number> = { small: 0.7, medium: 0.85, large: 1 };
+const REF_DPR = 1.25;
+
+export type Tab = "Controls" | "Today" | "Stats" | "Clipboard" | "Apps" | "Wallpaper" | "Power" | "Settings";
 // Panel size per tab, in logical px.
 const TABS: { name: Tab; w: number; h: number }[] = [
-  { name: "Controls", w: 768, h: 524 },
+  { name: "Controls", w: 800, h: 524 },
   { name: "Today", w: 1056, h: 532 },
   { name: "Stats", w: 1056, h: 404 },
   { name: "Clipboard", w: 1056, h: 536 },
   { name: "Apps", w: 864, h: 692 },
   { name: "Wallpaper", w: 1248, h: 376 },
-  { name: "Power", w: 768, h: 200 },
+  { name: "Power", w: 800, h: 200 },
+  { name: "Settings", w: 800, h: 564 },
 ];
 const PEEK = { w: 456, h: 180 };
 
@@ -46,6 +55,8 @@ export default function App() {
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [updatePct, setUpdatePct] = useState<number | null>(null);
   const [installing, setInstalling] = useState(false);
+  const [preset, setPreset] = useState<SizeKey>("medium");
+  const [dpr, setDpr] = useState(window.devicePixelRatio || 1);
   const boxRef = useRef<HTMLDivElement>(null);
   const spring = useRef<SpringBox | null>(null);
   const prevMode = useRef<Mode>("compact");
@@ -55,6 +66,9 @@ export default function App() {
   const now = useClock(!expanded);
   const [h24] = useHour24();
   const timer = useTimer();
+
+  // UI scale = chosen preset, corrected for this display's Windows scaling
+  const eff = Math.min(1.4, Math.max(0.4, (SIZE_FACTOR[preset] * REF_DPR) / dpr));
 
   const flash = useCallback((m: string) => {
     setMessage(m);
@@ -82,6 +96,23 @@ export default function App() {
       offB.then((f) => f());
     };
   }, []);
+
+  // Size preset (from the tray or the Power tab) and display-scale changes
+  useEffect(() => {
+    api.getSettings().then((s) => setPreset(s.size)).catch(() => {});
+    const off = onSettings((s) => setPreset(s.size));
+    const onResize = () => setDpr(window.devicePixelRatio || 1);
+    window.addEventListener("resize", onResize);
+    return () => {
+      off.then((f) => f());
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  // Make the (transparent) window match the scaled island
+  useEffect(() => {
+    api.setScale(eff).catch(() => {});
+  }, [eff]);
 
   // Auto-update prompt
   useEffect(() => {
@@ -149,14 +180,15 @@ export default function App() {
     spring.current.to(target, cfg, reduceMotion());
     prevMode.current = mode;
     // Tell Rust the island's target shape so hover and click-through use the right area.
-    api.setRect({ x: (WIN_W - target.w) / 2, y: 0, w: target.w, h: target.h }).catch(() => {});
+    // (window-relative logical px, so scaled by eff)
+    api.setRect({ x: ((BASE_W - target.w) / 2) * eff, y: 0, w: target.w * eff, h: target.h * eff }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, target.w, target.h]);
+  }, [mode, target.w, target.h, eff]);
 
   const tabProps: TabProps = { flash, collapse };
 
   return (
-    <main className="stage">
+    <main className="stage" style={{ ["--ui" as string]: eff } as CSSProperties}>
       <div ref={boxRef} className={`island is-${mode}`}>
         <i className="ear l" />
         <i className="ear r" />
@@ -193,14 +225,10 @@ export default function App() {
                 {TABS.map((t) => (
                   <button key={t.name} className={`tab ${tab === t.name ? "on" : ""}`} onClick={() => setTab(t.name)}>
                     {t.name}
+                    {t.name === "Settings" && update && <i className="tdot" title="Update available" />}
                   </button>
                 ))}
               </nav>
-              {update && (
-                <button className="update-btn" onClick={installUpdate} disabled={installing}>
-                  {installing ? `Updating${updatePct !== null ? ` ${updatePct}%` : "…"}` : `Update to v${update.version}`}
-                </button>
-              )}
             </header>
             <section className="content" key={tab}>
               {tab === "Controls" && <Controls {...tabProps} media={media} art={art} />}
@@ -210,6 +238,9 @@ export default function App() {
               {tab === "Apps" && <Apps {...tabProps} />}
               {tab === "Wallpaper" && <Wallpaper {...tabProps} />}
               {tab === "Power" && <PowerTab {...tabProps} />}
+              {tab === "Settings" && (
+                <SettingsTab {...tabProps} update={update} installing={installing} updatePct={updatePct} onInstall={installUpdate} />
+              )}
             </section>
             {message && <div className="toast">{message}</div>}
           </div>

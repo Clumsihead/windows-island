@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, State, WebviewWindow};
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -138,6 +138,27 @@ fn place(win: &WebviewWindow, st: &Island) {
     let y = m.position().y;
     let _ = win.set_position(PhysicalPosition::new(x, y));
     *st.origin.lock().unwrap() = (x, y, m.scale_factor());
+}
+
+/// Window size at UI scale 1.0, in logical px. Keep in sync with BASE_W / BASE_H in App.tsx
+/// and the window size in tauri.conf.json.
+const BASE_W: f64 = 1320.0;
+const BASE_H: f64 = 760.0;
+
+/// The UI scales itself with a CSS transform; this shrinks or grows the transparent window to
+/// match, so a small island doesn't leave a huge invisible window on the screen.
+pub fn set_scale(app: &AppHandle, scale: f64) {
+    let Some(win) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    let s = scale.clamp(0.4, 1.4);
+    let _ = win.set_size(LogicalSize::new((BASE_W * s).ceil(), (BASE_H * s).ceil()));
+    place(&win, &app.state::<Island>());
+}
+
+#[tauri::command]
+pub fn island_set_scale(app: AppHandle, scale: f64) {
+    set_scale(&app, scale);
 }
 
 fn show_noactivate(win: &WebviewWindow) {
