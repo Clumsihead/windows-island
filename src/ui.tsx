@@ -23,10 +23,13 @@ export function Ring({
 
 /** Big rounded slider with the icon inside the fill and the value on the right. */
 export function PillSlider({
-  icon, value, onChange, disabled, label, hint,
-}: { icon: ReactNode; value: number; onChange: (v: number) => void; disabled?: boolean; label: string; hint?: string }) {
+  icon, value, onChange, disabled, label, hint, onDragStart,
+}: {
+  icon: ReactNode; value: number; onChange: (v: number) => void; disabled?: boolean; label: string; hint?: string;
+  onDragStart?: () => void;
+}) {
   return (
-    <label className={`pslider ${disabled ? "disabled" : ""}`} title={hint}>
+    <label className={`pslider ${disabled ? "disabled" : ""}`} title={hint} onPointerDown={onDragStart}>
       <span className="pslider-fill" style={{ width: `max(56px, ${value}%)` }}>
         <span className="pslider-icon">{icon}</span>
         {value >= 88 && !disabled && <b className="pslider-val in">{value}%</b>}

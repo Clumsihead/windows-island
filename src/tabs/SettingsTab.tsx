@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { api, onSettings, SizeKey, UpdateInfo } from "../api";
+import { api, onSettings, SizeKey, UpdateInfo, Visibility } from "../api";
 import { useHour24 } from "../hooks";
 import type { TabProps } from "../App";
 
@@ -19,12 +19,13 @@ type Props = TabProps & {
 
 export default function SettingsTab({ flash, update, installing, updatePct, onInstall }: Props) {
   const [size, setSize] = useState<SizeKey>("medium");
+  const [visibility, setVisibility] = useState<Visibility>("peek");
   const [h24, toggleH24] = useHour24();
   const [version, setVersion] = useState("");
 
   useEffect(() => {
-    api.getSettings().then((s) => setSize(s.size)).catch(() => {});
-    const off = onSettings((s) => setSize(s.size));
+    api.getSettings().then((s) => { setSize(s.size); setVisibility(s.visibility); }).catch(() => {});
+    const off = onSettings((s) => { setSize(s.size); setVisibility(s.visibility); });
     getVersion().then(setVersion).catch(() => {});
     return () => {
       off.then((f) => f());
@@ -34,7 +35,7 @@ export default function SettingsTab({ flash, update, installing, updatePct, onIn
   return (
     <div className="settings">
       <div className="sgroup">
-        <h4>APPEARANCE</h4>
+        <h4>GENERAL</h4>
         <div className="srow">
           <div>
             Island size
@@ -63,6 +64,36 @@ export default function SettingsTab({ flash, update, installing, updatePct, onIn
           <div className="seg" role="group" aria-label="Clock format">
             <button className={h24 ? "on" : ""} onClick={() => !h24 && toggleH24()}>24-hour</button>
             <button className={!h24 ? "on" : ""} onClick={() => h24 && toggleH24()}>12-hour</button>
+          </div>
+        </div>
+        <div className="srow">
+          <div>
+            Visibility
+            <small>
+              {visibility === "peek"
+                ? "Over other apps only a thin edge shows at the top of the screen. Hover it to open"
+                : "Hidden whenever an app is in front, shown on the desktop"}
+            </small>
+          </div>
+          <div className="seg" role="group" aria-label="Visibility">
+            <button
+              className={visibility === "desktop" ? "on" : ""}
+              onClick={() => {
+                setVisibility("desktop");
+                api.setVisibility("desktop").catch((e) => flash(String(e)));
+              }}
+            >
+              Desktop only
+            </button>
+            <button
+              className={visibility === "peek" ? "on" : ""}
+              onClick={() => {
+                setVisibility("peek");
+                api.setVisibility("peek").catch((e) => flash(String(e)));
+              }}
+            >
+              Everywhere
+            </button>
           </div>
         </div>
       </div>

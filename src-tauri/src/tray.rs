@@ -30,14 +30,6 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
-    let desktop = CheckMenuItem::with_id(
-        app,
-        "desktop_only",
-        "Only show on desktop",
-        true,
-        false,
-        None::<&str>,
-    )?;
     let autostart = CheckMenuItem::with_id(
         app,
         "autostart",
@@ -60,23 +52,33 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     )?;
     *app.state::<settings::SettingsState>().menu.lock().unwrap() = size_items;
 
+    let vis_now = app.state::<settings::SettingsState>().current.lock().unwrap().visibility.clone();
+    let mut vis_items: Vec<(String, CheckMenuItem<tauri::Wry>)> = Vec::new();
+    for (key, label) in [("desktop", "Only on desktop"), ("peek", "Everywhere (peek over apps)")] {
+        let item = CheckMenuItem::with_id(app, format!("vis_{key}"), label, true, key == vis_now, None::<&str>)?;
+        vis_items.push((key.to_string(), item));
+    }
+    let vis_menu = Submenu::with_items(app, "Visibility", true, &[&vis_items[0].1, &vis_items[1].1])?;
+    *app.state::<settings::SettingsState>().vis_menu.lock().unwrap() = vis_items;
+
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
-        &[&version, &sep_top, &toggle, &desktop, &autostart, &size_menu, &updates, &sep, &quit],
+        &[&version, &sep_top, &toggle, &vis_menu, &autostart, &size_menu, &updates, &sep, &quit],
     )?;
 
-    let desktop_item = desktop.clone();
     let autostart_item = autostart.clone();
     let mut builder = TrayIconBuilder::new()
         .tooltip("Windows Island")
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "toggle" => island::hotkey(app),
-            "desktop_only" => {
-                let on = desktop_item.is_checked().unwrap_or(true);
-                island::set_desktop_only(app, on);
+            "vis_desktop" => {
+                let _ = settings::set_visibility(app, "desktop");
+            }
+            "vis_peek" => {
+                let _ = settings::set_visibility(app, "peek");
             }
             "autostart" => {
                 let on = autostart_item.is_checked().unwrap_or(false);

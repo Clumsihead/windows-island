@@ -42,7 +42,9 @@ export type Clip = {
 export type AppEntry = { name: string; path: string };
 export type UpdateInfo = { version: string; notes: string | null };
 export type SizeKey = "small" | "medium" | "large";
-export type Settings = { size: SizeKey };
+// "desktop": only on the desktop.  "peek": everywhere, but only a thin edge shows over other apps.
+export type Visibility = "desktop" | "peek";
+export type Settings = { size: SizeKey; visibility: Visibility };
 
 export const EMPTY_MEDIA: Media = {
   available: false, title: "", artist: "", playing: false, position: 0, duration: 0, app: "",
@@ -56,7 +58,8 @@ export const api = {
   setScale: (scale: number) => invoke("island_set_scale", { scale }),
   getSettings: () => invoke<Settings>("settings_get"),
   setIslandSize: (size: SizeKey) => invoke("set_island_size", { size }),
-  getIsland: () => invoke<{ expanded: boolean; held: boolean }>("island_get"),
+  setVisibility: (mode: Visibility) => invoke("set_visibility_mode", { mode }),
+  getIsland: () => invoke<{ expanded: boolean; held: boolean; tucked: boolean }>("island_get"),
   // system
   stats: () => invoke<Stats>("system_stats"),
   topApps: () => invoke<TopApps>("top_apps"),
@@ -105,6 +108,8 @@ export const api = {
 
 export const onExpanded = (cb: (v: boolean) => void) => listen<boolean>("island:expanded", (e) => cb(e.payload));
 export const onSettings = (cb: (s: Settings) => void) => listen<Settings>("settings:changed", (e) => cb(e.payload));
+export const onTucked = (cb: (tucked: boolean) => void) => listen<boolean>("island:tucked", (e) => cb(e.payload));
+export const onBrightness = (cb: (percent: number) => void) => listen<number>("brightness:changed", (e) => cb(e.payload));
 export const onGoto = (cb: (tab: string) => void) => listen<string>("island:goto", (e) => cb(e.payload));
 export const onClips = (cb: (c: Clip[]) => void) => listen<Clip[]>("clipboard:changed", (e) => cb(e.payload));
 export const onUpdate = (cb: (u: UpdateInfo) => void) => listen<UpdateInfo>("update:available", (e) => cb(e.payload));

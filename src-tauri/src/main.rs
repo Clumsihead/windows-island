@@ -77,6 +77,7 @@ fn main() {
             island::island_set_scale,
             settings::settings_get,
             settings::set_island_size,
+            settings::set_visibility_mode,
             island::island_get,
             stats::system_stats,
             media::media_get,
@@ -141,6 +142,7 @@ fn main() {
             island::start_hover_loop(handle.clone());
             foreground::start(handle.clone());
             updater::start(handle.clone());
+            hw::start_brightness_watcher(handle.clone());
             Ok(())
         })
         .on_window_event(|window, event| {

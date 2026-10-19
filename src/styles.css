@@ -40,13 +40,17 @@ small { font-size: 12.5px; color: var(--muted); }
   position: absolute; top: 0; left: 50%; transform: translateX(-50%);
   max-width: 100%; max-height: 100%; contain: layout style;
   --r: 16px; --ear: 10px;
+  transition: transform 360ms var(--ease-io); /* the slide up into / down out of the tucked position */
 }
+/* "Everywhere" mode with another app in front: slide up until only the bottom 5px of the notch shows */
+.island.is-tucked { transform: translateX(-50%) translateY(-27px); }
+.island.is-tucked .body { box-shadow: 0 1px 6px #0009, inset 0 -1px 0 #ffffff30; }
 .island.is-peek { --bg: var(--maroon); }
 .body {
   position: absolute; inset: 0; overflow: hidden;
   border-radius: 0 0 var(--r) var(--r);
   background: var(--bg); box-shadow: 0 24px 70px #000c;
-  transition: background-color 240ms ease;
+  transition: background-color 240ms ease, box-shadow 300ms ease;
 }
 .ear { position: absolute; top: 0; width: var(--ear); height: var(--ear); pointer-events: none; }
 .ear.l { left: calc(var(--ear) * -1); background: radial-gradient(circle at 0 100%, transparent calc(var(--ear) - 0.5px), var(--bg) var(--ear)); }

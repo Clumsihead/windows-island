@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Bluetooth, ChevronDown, Contrast, Moon, Sun, Volume2, VolumeX, Wifi } from "lucide-react";
-import { api, Audio, Media, NetInfo, Radios } from "../api";
+import { api, Audio, Media, NetInfo, onBrightness, Radios } from "../api";
 import { usePoll } from "../hooks";
 import { PillSlider } from "../ui";
 import MediaCard from "../media";
@@ -40,12 +40,30 @@ export default function Controls({ flash, media, art }: TabProps & { media: Medi
   const [bright, setBright] = useState<number | null>(null);
   const draggingVol = useRef(false);
   const brightTimer = useRef<number | undefined>(undefined);
+  const draggingBright = useRef(false);
 
   const refreshRadios = () => api.radios().then(setRadios).catch(() => {});
   useEffect(() => {
     refreshRadios();
     api.darkGet().then(setDark).catch(() => {});
     api.brightnessGet().then(setBright).catch(() => setBright(null));
+
+    // Follow brightness changes made anywhere else (Fn keys, the Windows Settings slider...).
+    // While you're dragging the island's own slider we ignore these, so it doesn't fight your hand;
+    // the last one after you let go is applied, which snaps to whatever the screen really settled on.
+    const off = onBrightness((v) => {
+      if (!draggingBright.current) setBright(v);
+    });
+    const release = () => {
+      draggingBright.current = false;
+    };
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    return () => {
+      off.then((f) => f());
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+    };
   }, []);
   useEffect(() => {
     if (audio && !draggingVol.current) setVol(Math.round(audio.volume * 100));
@@ -117,6 +135,7 @@ export default function Controls({ flash, media, art }: TabProps & { media: Medi
       <PillSlider
         label="Brightness" icon={<Sun size={18} />} value={bright ?? 0} disabled={bright === null}
         hint={bright === null ? "Brightness control works on laptop screens" : undefined} onChange={setBrightness}
+        onDragStart={() => (draggingBright.current = true)}
       />
 
       <MediaCard media={media} art={art} device={device} layout="wide" />

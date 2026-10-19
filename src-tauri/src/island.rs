@@ -21,6 +21,9 @@ pub const LABEL: &str = "island";
 
 /// Hover must last this long before the island opens (stops accidental flicks).
 const HOVER_OPEN: Duration = Duration::from_millis(90);
+/// When the island is tucked away at the top edge, require a longer hover so brushing past the top
+/// of an app (tabs, title-bar buttons) doesn't open it by accident.
+const HOVER_OPEN_TUCKED: Duration = Duration::from_millis(350);
 /// Cursor must stay away this long before it closes again.
 const LEAVE_CLOSE: Duration = Duration::from_millis(220);
 
@@ -44,6 +47,8 @@ pub struct Island {
     pub hide_pending: AtomicBool,
     pub desktop_only: AtomicBool,
     pub desktop_active: AtomicBool,
+    /// "Everywhere" mode with another app in front: only the island's bottom edge shows.
+    pub tucked: AtomicBool,
     /// Lets the sole foreground monitor stop promptly during application exit.
     pub foreground_running: Arc<AtomicBool>,
     /// Shown over an app because the hotkey was pressed.
@@ -68,6 +73,7 @@ impl Island {
             // Desktop-only behavior remains an explicit tray-menu option.
             desktop_only: AtomicBool::new(false),
             desktop_active: AtomicBool::new(false),
+            tucked: AtomicBool::new(false),
             foreground_running: Arc::new(AtomicBool::new(true)),
             forced: AtomicBool::new(false),
             click_through: AtomicBool::new(true),
@@ -171,6 +177,7 @@ fn show_noactivate(win: &WebviewWindow) {
 
 /// Single place that decides whether the window is on screen at all.
 pub fn apply_visibility(app: &AppHandle) {
+    refresh_tucked(app);
     let st = app.state::<Island>();
     let Some(win) = app.get_webview_window(LABEL) else {
         return;
@@ -228,6 +235,18 @@ pub fn set_expanded(app: &AppHandle, next: bool) {
                 apply_visibility(&app);
             }
         });
+    }
+}
+
+/// In "everywhere" mode, while another app is in front, the island tucks up so that only its
+/// bottom edge peeks out at the top of the screen. The UI does the sliding; this says when.
+fn refresh_tucked(app: &AppHandle) {
+    let st = app.state::<Island>();
+    let tucked = !st.desktop_only.load(SeqCst)
+        && !st.desktop_active.load(SeqCst)
+        && !st.forced.load(SeqCst);
+    if st.tucked.swap(tucked, SeqCst) != tucked {
+        let _ = app.emit("island:tucked", tucked);
     }
 }
 
@@ -377,7 +396,8 @@ pub fn start_hover_loop(app: AppHandle) {
                 out_since = None;
                 if soft && !dragging {
                     let t = *in_since.get_or_insert_with(Instant::now);
-                    if t.elapsed() >= HOVER_OPEN {
+                    let need = if st.tucked.load(SeqCst) { HOVER_OPEN_TUCKED } else { HOVER_OPEN };
+                    if t.elapsed() >= need {
                         set_expanded(&app, true);
                         in_since = None;
                     }
@@ -412,6 +432,8 @@ pub struct IslandInfo {
     expanded: bool,
     /// opened with the keyboard (so the UI should skip the media "peek" card)
     held: bool,
+    /// only the bottom edge is showing ("everywhere" mode, another app in front)
+    tucked: bool,
 }
 
 #[tauri::command]
@@ -419,6 +441,7 @@ pub fn island_get(st: State<'_, Island>) -> IslandInfo {
     IslandInfo {
         expanded: st.expanded.load(SeqCst),
         held: st.held.load(SeqCst),
+        tucked: st.tucked.load(SeqCst),
     }
 }
 

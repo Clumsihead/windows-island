@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { ChevronDown, Music2 } from "lucide-react";
 import {
-  api, onExpanded, onGoto, onSettings, onUpdate, onUpdateProgress, EMPTY_MEDIA, Media, SizeKey, UpdateInfo,
+  api, onExpanded, onGoto, onSettings, onTucked, onUpdate, onUpdateProgress, EMPTY_MEDIA, Media, SizeKey, UpdateInfo,
 } from "./api";
 import { usePoll, useClock, useHour24, formatTime, mmss } from "./hooks";
 import { useTimer } from "./timer";
@@ -36,9 +36,13 @@ const TABS: { name: Tab; w: number; h: number }[] = [
   { name: "Apps", w: 864, h: 692 },
   { name: "Wallpaper", w: 1248, h: 376 },
   { name: "Power", w: 800, h: 200 },
-  { name: "Settings", w: 800, h: 564 },
+  { name: "Settings", w: 800, h: 628 },
 ];
 const PEEK = { w: 456, h: 180 };
+const COMPACT_H = 32;
+// In "Everywhere" mode, with another app in front, the notch slides up until only this much of its
+// bottom edge (logical px) is left showing at the top of the screen.
+const TUCK_SHOW = 5;
 
 type Mode = "compact" | "peek" | "full";
 
@@ -49,6 +53,7 @@ export type TabProps = { flash: (m: string) => void; collapse: () => void };
 export default function App() {
   const [expanded, setExpanded] = useState(false);
   const [view, setView] = useState<"peek" | "full">("peek");
+  const [tucked, setTucked] = useState(false);
   const [tab, setTab] = useState<Tab>("Controls");
   const [art, setArt] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -79,7 +84,8 @@ export default function App() {
 
   // Window <-> Rust state
   useEffect(() => {
-    api.getIsland().then((s) => { setExpanded(s.expanded); setView(s.held ? "full" : "peek"); }).catch(() => {});
+    api.getIsland().then((s) => { setExpanded(s.expanded); setView(s.held ? "full" : "peek"); setTucked(s.tucked); }).catch(() => {});
+    const offT = onTucked(setTucked);
     const offA = onExpanded((v) => {
       setExpanded(v);
       if (!v) setView("peek");
@@ -94,6 +100,7 @@ export default function App() {
     return () => {
       offA.then((f) => f());
       offB.then((f) => f());
+      offT.then((f) => f());
     };
   }, []);
 
@@ -165,9 +172,10 @@ export default function App() {
   const playing = media.available && media.playing;
   const mode: Mode = !expanded ? "compact" : view === "peek" && media.available ? "peek" : "full";
   const size = TABS.find((t) => t.name === tab)!;
+  const tuckedNow = tucked && !expanded; // only the bottom edge shows
   const target: Box =
     mode === "compact"
-      ? { w: playing || timer.running ? 232 : 190, h: 32, r: 16, e: 10 }
+      ? { w: playing || timer.running ? 232 : 190, h: COMPACT_H, r: 16, e: 10 }
       : mode === "peek"
       ? { ...PEEK, r: 34, e: 22 }
       : { w: size.w, h: size.h, r: 38, e: 30 };
@@ -181,15 +189,18 @@ export default function App() {
     prevMode.current = mode;
     // Tell Rust the island's target shape so hover and click-through use the right area.
     // (window-relative logical px, so scaled by eff)
-    api.setRect({ x: ((BASE_W - target.w) / 2) * eff, y: 0, w: target.w * eff, h: target.h * eff }).catch(() => {});
+    // While tucked, the island sits above the screen edge, so its rectangle starts at a negative y and
+    // only its bottom few pixels are inside the hover zone.
+    const y = tuckedNow ? -(COMPACT_H - TUCK_SHOW) * eff : 0;
+    api.setRect({ x: ((BASE_W - target.w) / 2) * eff, y, w: target.w * eff, h: target.h * eff }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, target.w, target.h, eff]);
+  }, [mode, target.w, target.h, eff, tuckedNow]);
 
   const tabProps: TabProps = { flash, collapse };
 
   return (
     <main className="stage" style={{ ["--ui" as string]: eff } as CSSProperties}>
-      <div ref={boxRef} className={`island is-${mode}`}>
+      <div ref={boxRef} className={`island is-${mode}${tuckedNow ? " is-tucked" : ""}`}>
         <i className="ear l" />
         <i className="ear r" />
         <div className="body">
