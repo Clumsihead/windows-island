@@ -1,5 +1,8 @@
-# Builds the Windows installer and attaches it to a draft GitHub Release
-# whenever you push a version tag, e.g.:  git tag v0.4.0 && git push origin v0.4.0
+# Builds the signed Windows installer AND the auto-update feed, and attaches them to a DRAFT
+# GitHub Release whenever a version tag is pushed. Installed copies only see the update after you
+# click "Publish release", so the draft is your last chance to check it.
+#
+# Easiest way to run it: double-click release.bat
 name: Release
 
 on:
@@ -28,12 +31,42 @@ jobs:
 
       - run: npm ci
 
-      - uses: tauri-apps/tauri-action@v0
+      # Fail early, with a clear message, instead of building an installer nobody can update from.
+      - name: Check the update-signing key is set
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::The TAURI_SIGNING_PRIVATE_KEY secret is missing. Run scripts/setup-updater.ps1 once (it uploads it), or add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Build and create the draft release
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Used to sign the update package. Created by scripts/setup-updater.ps1.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Windows Island ${{ github.ref_name }}"
-          releaseBody: "Download the -setup.exe below, run it, and the island appears at the top of your screen."
+          releaseBody: "Download the -setup.exe below. If you already have Windows Island installed, it will update itself."
           releaseDraft: true
           prerelease: false
+          includeUpdaterJson: true
+          # Turns on the updater settings + signed update files (and latest.json) for release builds only.
+          args: --config src-tauri/tauri.updater.conf.json
+
+      # The app can only update itself if latest.json and a .sig file are on the release.
+      - name: Verify the update files made it onto the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          names=$(gh api "repos/${{ github.repository }}/releases?per_page=30" --jq '.[] | select(.tag_name=="${{ github.ref_name }}") | .assets[].name')
+          echo "Files on the release:"
+          echo "$names"
+          echo "$names" | grep -qx "latest.json" || { echo "::error::latest.json is missing from the release, so installed apps could not find this update."; exit 1; }
+          echo "$names" | grep -q "\.sig$" || { echo "::error::No .sig signature file on the release, so the update could not be verified."; exit 1; }

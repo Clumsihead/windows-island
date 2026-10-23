@@ -325,8 +325,8 @@ small { font-size: 12.5px; color: var(--muted); }
 
 /* ============ power ============ */
 .power { height: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.seg { display: flex; gap: 6px; }
-.seg button { padding: 9px 22px; border-radius: 22px; font-size: 14px; font-weight: 500; color: #cfccbc; transition: background 160ms; }
+.seg { display: flex; gap: 6px; flex: none; }
+.seg button { padding: 9px 22px; border-radius: 22px; font-size: 14px; font-weight: 500; color: #cfccbc; transition: background 160ms; white-space: nowrap; }
 .seg button:hover { background: #ffffff0c; }
 .seg button.on { background: var(--olive); color: var(--on-olive); }
 .ptile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; border-radius: 28px; background: var(--card); text-align: center; transition: background 200ms, border-radius 260ms var(--ease); padding: 0 8px; }
@@ -344,6 +344,14 @@ small { font-size: 12.5px; color: var(--muted); }
 .srow > div > small { display: block; margin-top: 2px; }
 .srow kbd { font: inherit; font-size: 13px; background: var(--card3); padding: 5px 12px; border-radius: 9px; white-space: nowrap; }
 .srow.tight { min-height: 44px; }
+
+/* update prompt + settings status */
+.nudge { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 7; display: flex; align-items: center; gap: 12px; padding: 5px 6px 5px 18px; border-radius: 999px; background: var(--card3); box-shadow: 0 10px 34px #000b, 0 0 0 1px #bdb55a40; font-size: 13.5px; white-space: nowrap; animation: nudge-in 320ms var(--ease) both; }
+@keyframes nudge-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%); } }
+.nudge-x { width: 30px; height: 30px; border-radius: 50%; color: var(--muted); font-size: 20px; line-height: 1; display: grid; place-items: center; }
+.nudge-x:hover { background: #ffffff12; color: var(--text); }
+.srow > div > small.bad { color: #f2b8b5; }
+.srow > div > small.warn { color: #e8c56a; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

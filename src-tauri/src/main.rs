@@ -78,6 +78,7 @@ fn main() {
             settings::settings_get,
             settings::set_island_size,
             settings::set_visibility_mode,
+            settings::set_auto_update,
             island::island_get,
             stats::system_stats,
             media::media_get,
@@ -116,6 +117,7 @@ fn main() {
             updater::update_check,
             updater::update_install,
             updater::update_pending,
+            updater::updater_status,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

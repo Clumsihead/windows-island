@@ -88,6 +88,19 @@ try {
         if (-not (Test-Path "src-tauri/tauri.updater.conf.json")) {
             throw "Auto-update isn't set up yet. Run this once first:`n  powershell -ExecutionPolicy Bypass -File scripts\setup-updater.ps1"
         }
+        # The GitHub build has to be the update-aware one, or installed apps will never see this release.
+        $workflow = ""
+        if (Test-Path ".github/workflows/release.yml") { $workflow = ReadText ".github/workflows/release.yml" }
+        if ($workflow -notmatch 'tauri\.updater\.conf\.json' -or $workflow -notmatch 'TAURI_SIGNING_PRIVATE_KEY') {
+            throw "Your GitHub build file (.github/workflows/release.yml) is an old one. It doesn't sign updates or build the update feed, so installed apps would never see this release.`nReplace it with the new release.yml from the update kit, then run this again."
+        }
+        if (Get-Command gh -ErrorAction SilentlyContinue) {
+            $secrets = & gh secret list 2>$null
+            if ($LASTEXITCODE -eq 0 -and ("$secrets" -notmatch 'TAURI_SIGNING_PRIVATE_KEY')) {
+                throw "GitHub doesn't have your update-signing key yet, so the build would fail.`nRun this once: powershell -ExecutionPolicy Bypass -File scripts\setup-updater.ps1"
+            }
+        }
+
         $cargoText = ReadText "src-tauri/Cargo.toml"
         $m = [regex]::Match($cargoText, '(?m)^version\s*=\s*"(\d+\.\d+\.\d+)"')
         if (-not $m.Success) { throw "Couldn't find the version number in src-tauri\Cargo.toml" }

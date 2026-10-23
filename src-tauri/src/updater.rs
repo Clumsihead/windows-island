@@ -16,9 +16,10 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 const FIRST_CHECK_DELAY: Duration = Duration::from_secs(30);
 /// How often to look again while the app stays running.
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
-/// true: an update found at launch installs straight away (the app restarts into it).
-/// false: it only shows an "Update available" prompt and waits for the user.
-const INSTALL_AT_LAUNCH: bool = true;
+/// If a check fails (no network just after boot, say) try again after this long, a few times,
+/// instead of waiting the full six hours.
+const RETRY_AFTER: Duration = Duration::from_secs(120);
+const MAX_RETRIES: u32 = 4;
 
 pub struct UpdaterState {
     pub configured: bool,
@@ -26,6 +27,8 @@ pub struct UpdaterState {
     busy: AtomicBool,
     /// The tray menu entry whose text we keep up to date.
     pub menu_item: Mutex<Option<MenuItem<tauri::Wry>>>,
+    /// When the last check ran (ms since 1970) and what it found, so the Settings tab can show it.
+    last: Mutex<Option<(u64, String)>>,
 }
 
 impl UpdaterState {
@@ -35,6 +38,7 @@ impl UpdaterState {
             pending: Mutex::new(None),
             busy: AtomicBool::new(false),
             menu_item: Mutex::new(None),
+            last: Mutex::new(None),
         }
     }
 }
@@ -52,8 +56,35 @@ fn set_label(app: &AppHandle, text: &str) {
     }
 }
 
-/// Asks GitHub whether a newer version exists. Remembers it and tells the UI + tray.
+fn record(app: &AppHandle, text: String) {
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    eprintln!("[updater] {text}");
+    // Also keep it in a small file, so it can be read even when nothing is running.
+    if let Ok(dir) = app.path().app_data_dir() {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("last-update-check.txt"), format!("{at}\n{text}\n"));
+    }
+    *app.state::<UpdaterState>().last.lock().unwrap() = Some((at, text));
+}
+
+/// Asks GitHub whether a newer version exists, and remembers what it said.
 pub async fn check(app: &AppHandle, install_now: bool) -> Result<Option<UpdateInfo>, String> {
+    let result = check_inner(app, install_now).await;
+    let current = app.package_info().version.to_string();
+    let text = match &result {
+        Ok(Some(u)) => format!("Version {} is available (you have {current})", u.version),
+        Ok(None) => format!("You're up to date (v{current})"),
+        Err(e) => format!("Check failed: {e}"),
+    };
+    record(app, text);
+    result
+}
+
+/// Remembers a found update and tells the UI + tray.
+async fn check_inner(app: &AppHandle, install_now: bool) -> Result<Option<UpdateInfo>, String> {
     let st = app.state::<UpdaterState>();
     if !st.configured {
         return Err("Updates aren't set up in this build".into());
@@ -140,10 +171,19 @@ pub fn start(app: AppHandle) {
         std::thread::sleep(FIRST_CHECK_DELAY);
         let mut first = true;
         loop {
-            let install_now = first && INSTALL_AT_LAUNCH;
+            // "Install updates automatically" is a setting; by default the user is asked instead.
+            let auto = app.state::<crate::settings::SettingsState>().current.lock().unwrap().auto_update;
+            let install_now = first && auto;
             first = false;
-            if let Err(e) = tauri::async_runtime::block_on(check(&app, install_now)) {
-                eprintln!("[updater] check failed: {e}");
+            let mut tries = 0;
+            loop {
+                match tauri::async_runtime::block_on(check(&app, install_now)) {
+                    Err(_) if tries < MAX_RETRIES => {
+                        tries += 1;
+                        std::thread::sleep(RETRY_AFTER);
+                    }
+                    _ => break,
+                }
             }
             std::thread::sleep(CHECK_EVERY);
         }
@@ -168,4 +208,25 @@ pub fn update_pending(st: State<'_, UpdaterState>) -> Option<UpdateInfo> {
         .unwrap()
         .as_ref()
         .map(|u| UpdateInfo { version: u.version.clone(), notes: u.body.clone() })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdaterStatus {
+    /// false when this build wasn't made with the updater turned on (so it can never update itself)
+    configured: bool,
+    current: String,
+    last_checked: Option<u64>,
+    last_result: String,
+}
+
+#[tauri::command]
+pub fn updater_status(app: AppHandle, st: State<'_, UpdaterState>) -> UpdaterStatus {
+    let last = st.last.lock().unwrap().clone();
+    UpdaterStatus {
+        configured: st.configured,
+        current: app.package_info().version.to_string(),
+        last_checked: last.as_ref().map(|l| l.0),
+        last_result: last.map(|l| l.1).unwrap_or_default(),
+    }
 }

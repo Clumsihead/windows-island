@@ -44,7 +44,8 @@ export type UpdateInfo = { version: string; notes: string | null };
 export type SizeKey = "small" | "medium" | "large";
 // "desktop": only on the desktop.  "peek": everywhere, but only a thin edge shows over other apps.
 export type Visibility = "desktop" | "peek";
-export type Settings = { size: SizeKey; visibility: Visibility };
+export type Settings = { size: SizeKey; visibility: Visibility; autoUpdate: boolean };
+export type UpdaterStatus = { configured: boolean; current: string; lastChecked: number | null; lastResult: string };
 
 export const EMPTY_MEDIA: Media = {
   available: false, title: "", artist: "", playing: false, position: 0, duration: 0, app: "",
@@ -104,6 +105,9 @@ export const api = {
   // auto-update
   updatePending: () => invoke<UpdateInfo | null>("update_pending"),
   updateInstall: () => invoke("update_install"),
+  updateCheck: () => invoke<UpdateInfo | null>("update_check"),
+  updaterStatus: () => invoke<UpdaterStatus>("updater_status"),
+  setAutoUpdate: (on: boolean) => invoke("set_auto_update", { on }),
 };
 
 export const onExpanded = (cb: (v: boolean) => void) => listen<boolean>("island:expanded", (e) => cb(e.payload));

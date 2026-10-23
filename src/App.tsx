@@ -36,7 +36,7 @@ const TABS: { name: Tab; w: number; h: number }[] = [
   { name: "Apps", w: 864, h: 692 },
   { name: "Wallpaper", w: 1248, h: 376 },
   { name: "Power", w: 800, h: 200 },
-  { name: "Settings", w: 800, h: 628 },
+  { name: "Settings", w: 800, h: 724 },
 ];
 const PEEK = { w: 456, h: 180 };
 const COMPACT_H = 32;
@@ -60,6 +60,7 @@ export default function App() {
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [updatePct, setUpdatePct] = useState<number | null>(null);
   const [installing, setInstalling] = useState(false);
+  const [nudgeOff, setNudgeOff] = useState(false); // "not now" for this update
   const [preset, setPreset] = useState<SizeKey>("medium");
   const [dpr, setDpr] = useState(window.devicePixelRatio || 1);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -131,6 +132,7 @@ export default function App() {
       offP.then((f) => f());
     };
   }, []);
+  useEffect(() => setNudgeOff(false), [update?.version]);
   const installUpdate = useCallback(() => {
     setInstalling(true);
     api.updateInstall().catch(() => {
@@ -253,6 +255,15 @@ export default function App() {
                 <SettingsTab {...tabProps} update={update} installing={installing} updatePct={updatePct} onInstall={installUpdate} />
               )}
             </section>
+            {update && !nudgeOff && tab !== "Settings" && (
+              <div className="nudge" role="status">
+                <span>Update v{update.version} is available</span>
+                <button className="update-btn" onClick={installUpdate} disabled={installing}>
+                  {installing ? `Updating${updatePct !== null ? ` ${updatePct}%` : "…"}` : "Update now"}
+                </button>
+                <button className="nudge-x" onClick={() => setNudgeOff(true)} aria-label="Not now" title="Not now">×</button>
+              </div>
+            )}
             {message && <div className="toast">{message}</div>}
           </div>
         </div>

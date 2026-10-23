@@ -12,10 +12,14 @@ pub const SIZES: [&str; 3] = ["small", "medium", "large"];
 pub const VISIBILITIES: [&str; 2] = ["desktop", "peek"];
 
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub size: String,
     #[serde(default = "default_visibility")]
     pub visibility: String,
+    /// install a found update right after launch (false = just tell the user)
+    #[serde(default)]
+    pub auto_update: bool,
 }
 
 fn default_visibility() -> String {
@@ -24,7 +28,7 @@ fn default_visibility() -> String {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { size: "medium".into(), visibility: default_visibility() }
+        Self { size: "medium".into(), visibility: default_visibility(), auto_update: false }
     }
 }
 
@@ -128,4 +132,17 @@ pub fn set_island_size(app: AppHandle, size: String) -> Result<(), String> {
 #[tauri::command]
 pub fn set_visibility_mode(app: AppHandle, mode: String) -> Result<(), String> {
     set_visibility(&app, &mode)
+}
+
+#[tauri::command]
+pub fn set_auto_update(app: AppHandle, on: bool) -> Result<(), String> {
+    let snapshot = {
+        let st = app.state::<SettingsState>();
+        let mut cur = st.current.lock().unwrap();
+        cur.auto_update = on;
+        cur.clone()
+    };
+    save(&app, &snapshot);
+    let _ = app.emit("settings:changed", snapshot);
+    Ok(())
 }
