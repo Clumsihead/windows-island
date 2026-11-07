@@ -24,6 +24,7 @@ export type Media = {
   position: number;
   duration: number;
   app: string;
+  canSeek: boolean;
 };
 export type Audio = { volume: number; muted: boolean };
 export type Radios = { wifi: boolean | null; bluetooth: boolean | null };
@@ -48,7 +49,7 @@ export type Settings = { size: SizeKey; visibility: Visibility; autoUpdate: bool
 export type UpdaterStatus = { configured: boolean; current: string; lastChecked: number | null; lastResult: string };
 
 export const EMPTY_MEDIA: Media = {
-  available: false, title: "", artist: "", playing: false, position: 0, duration: 0, app: "",
+  available: false, title: "", artist: "", playing: false, position: 0, duration: 0, app: "", canSeek: false,
 };
 
 export const api = {
@@ -70,6 +71,7 @@ export const api = {
   media: () => invoke<Media>("media_get"),
   mediaArt: () => invoke<string | null>("media_art"),
   mediaControl: (action: "toggle" | "next" | "prev") => invoke("media_control", { action }),
+  mediaSeek: (seconds: number) => invoke("media_seek", { seconds }),
   audio: () => invoke<Audio | null>("audio_get"),
   audioDevice: () => invoke<string | null>("audio_device"),
   setVolume: (volume: number) => invoke("audio_set_volume", { volume }),

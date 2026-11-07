@@ -20,12 +20,104 @@ function usePosition(m: Media) {
 }
 
 export function WaveProgress({ media }: { media: Media }) {
-  const pos = usePosition(media);
-  const pct = media.duration > 0 ? Math.min(100, (pos / media.duration) * 100) : 0;
+  const livePos = usePosition(media);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<number | null>(null); // 0..1 while the bar is being dragged
+  const [seeked, setSeeked] = useState<{ pos: number; at: number } | null>(null);
+  const [, tick] = useState(0);
+  const canSeek = media.canSeek && media.duration > 0;
+
+  // Tracked in a ref, not just state, so a very quick click or tap (down and up before the next
+  // render) is never missed.
+  const dragging = useRef(false);
+  // While you drag, hold the island open: overshooting the bar a little would otherwise move the
+  // cursor off the island and make it close mid-drag.
+  const pinned = useRef(false);
+  const setHold = (on: boolean) => {
+    if (pinned.current === on) return;
+    pinned.current = on;
+    api.setPinned(on).catch(() => {});
+  };
+  useEffect(() => () => { if (pinned.current) api.setPinned(false).catch(() => {}); }, []);
+
+  // After a seek, keep showing the new spot until the player has caught up and reported it.
+  useEffect(() => {
+    if (!seeked) return;
+    const id = setTimeout(() => setSeeked(null), 2000);
+    return () => clearTimeout(id);
+  }, [seeked]);
+  useEffect(() => {
+    if (!seeked || !media.playing) return;
+    const id = setInterval(() => tick((t) => t + 1), 400);
+    return () => clearInterval(id);
+  }, [seeked, media.playing]);
+
+  const fractionAt = (clientX: number) => {
+    const r = trackRef.current?.getBoundingClientRect();
+    if (!r || r.width <= 0) return 0;
+    return Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+  };
+  const jumpTo = (seconds: number) => {
+    const sec = Math.min(media.duration, Math.max(0, seconds));
+    setSeeked({ pos: sec, at: performance.now() });
+    // if the player refuses, drop the guess and show the real position again
+    api.mediaSeek(sec).catch(() => setSeeked(null));
+  };
+
+  const pos =
+    drag !== null
+      ? drag * media.duration
+      : seeked
+      ? seeked.pos + (media.playing ? (performance.now() - seeked.at) / 1000 : 0)
+      : livePos;
+  const pct = media.duration > 0 ? Math.min(100, Math.max(0, (pos / media.duration) * 100)) : 0;
+
   return (
-    <div className="wp">
+    <div className={`wp ${canSeek ? "can-seek" : ""} ${drag !== null ? "dragging" : ""}`}>
       <span className="wp-t">{mmss(pos)}</span>
-      <div className="wp-track">
+      <div
+        ref={trackRef}
+        className="wp-track"
+        role="slider"
+        aria-label="Song position"
+        aria-valuemin={0}
+        aria-valuemax={Math.round(media.duration)}
+        aria-valuenow={Math.round(pos)}
+        tabIndex={canSeek ? 0 : -1}
+        onPointerDown={(e) => {
+          if (!canSeek) return;
+          e.preventDefault();
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId); // keep following the mouse outside the bar
+          } catch {
+            /* not supported: dragging still works inside the bar */
+          }
+          dragging.current = true;
+          setHold(true);
+          setDrag(fractionAt(e.clientX));
+        }}
+        onPointerMove={(e) => {
+          if (dragging.current) setDrag(fractionAt(e.clientX));
+        }}
+        onPointerUp={(e) => {
+          if (!dragging.current) return;
+          dragging.current = false;
+          const f = fractionAt(e.clientX);
+          setDrag(null);
+          setHold(false);
+          jumpTo(f * media.duration);
+        }}
+        onPointerCancel={() => {
+          dragging.current = false;
+          setDrag(null);
+          setHold(false);
+        }}
+        onKeyDown={(e) => {
+          if (!canSeek || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+          e.preventDefault();
+          jumpTo(pos + (e.key === "ArrowRight" ? 5 : -5));
+        }}
+      >
         <div className="wp-line" />
         <div className={`wp-wave ${media.playing ? "on" : ""}`} style={{ width: `${pct}%` }} />
         <i className="wp-dot" style={{ left: `${pct}%` }} />

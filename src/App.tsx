@@ -222,7 +222,7 @@ export default function App() {
           <div
             className="v-peek"
             onClick={(e) => {
-              if (!(e.target as HTMLElement).closest("button")) setView("full");
+              if (!(e.target as HTMLElement).closest("button, .wp-track")) setView("full");
             }}
           >
             <MediaCard media={media} art={art} layout="peek" />

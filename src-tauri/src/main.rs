@@ -84,6 +84,7 @@ fn main() {
             media::media_get,
             media::media_art,
             media::media_control,
+            media::media_seek,
             audio::audio_get,
             audio::audio_set_volume,
             audio::audio_toggle_mute,

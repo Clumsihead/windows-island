@@ -345,6 +345,15 @@ small { font-size: 12.5px; color: var(--muted); }
 .srow kbd { font: inherit; font-size: 13px; background: var(--card3); padding: 5px 12px; border-radius: 9px; white-space: nowrap; }
 .srow.tight { min-height: 44px; }
 
+/* seekable progress bar */
+.wp-track { touch-action: none; user-select: none; }
+.wp-track::after { content: ""; position: absolute; inset: -11px 0; } /* a taller area to grab */
+.wp.can-seek .wp-track { cursor: pointer; }
+.wp-dot { transition: width 120ms ease, height 120ms ease; }
+.wp.can-seek:hover .wp-dot, .wp.dragging .wp-dot { width: 14px; height: 14px; }
+.wp.dragging .wp-t:first-child { color: var(--pink); }
+.wp-track:focus-visible { outline: 2px solid var(--pink); outline-offset: 7px; border-radius: 6px; }
+
 /* update prompt + settings status */
 .nudge { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 7; display: flex; align-items: center; gap: 12px; padding: 5px 6px 5px 18px; border-radius: 999px; background: var(--card3); box-shadow: 0 10px 34px #000b, 0 0 0 1px #bdb55a40; font-size: 13.5px; white-space: nowrap; animation: nudge-in 320ms var(--ease) both; }
 @keyframes nudge-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%); } }

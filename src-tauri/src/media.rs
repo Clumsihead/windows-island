@@ -22,6 +22,8 @@ pub struct MediaInfo {
     duration: f64,
     /// The app playing it, e.g. "Spotify" or "Brave"
     app: String,
+    /// whether the player lets other apps move the playback position (not every player does)
+    can_seek: bool,
 }
 
 fn pretty_app(id: &str) -> String {
@@ -42,11 +44,17 @@ fn current() -> windows::core::Result<Session> {
 fn read() -> windows::core::Result<MediaInfo> {
     let s = current()?;
     let props = s.TryGetMediaPropertiesAsync()?.get()?;
-    let playing = s.GetPlaybackInfo()?.PlaybackStatus()? == Status::Playing;
+    let info = s.GetPlaybackInfo()?;
+    let playing = info.PlaybackStatus()? == Status::Playing;
+    let can_seek = info
+        .Controls()
+        .and_then(|c| c.IsPlaybackPositionEnabled())
+        .unwrap_or(false);
     let (mut position, mut duration) = (0.0, 0.0);
     if let Ok(tl) = s.GetTimelineProperties() {
         // TimeSpan.Duration is in 100 ns ticks.
-        position = tl.Position()?.Duration as f64 / 1e7;
+        // measured from the start of the track's timeline (which is normally 0)
+        position = (tl.Position()?.Duration - tl.StartTime()?.Duration) as f64 / 1e7;
         duration = (tl.EndTime()?.Duration - tl.StartTime()?.Duration) as f64 / 1e7;
     }
     Ok(MediaInfo {
@@ -57,6 +65,7 @@ fn read() -> windows::core::Result<MediaInfo> {
         position,
         duration,
         app: s.SourceAppUserModelId().map(|h| pretty_app(&h.to_string())).unwrap_or_default(),
+        can_seek,
     })
 }
 
@@ -103,4 +112,30 @@ pub async fn media_art() -> Option<String> {
 #[tauri::command]
 pub async fn media_control(action: String) {
     let _ = tauri::async_runtime::spawn_blocking(move || control(&action)).await;
+}
+
+/// Moves playback to `seconds` from the start of the track.
+fn seek(seconds: f64) -> windows::core::Result<bool> {
+    let s = current()?;
+    // positions are 100 ns ticks counted from the timeline's start (normally 0)
+    let start = s
+        .GetTimelineProperties()
+        .and_then(|t| t.StartTime())
+        .map(|d| d.Duration)
+        .unwrap_or(0);
+    let ticks = start + (seconds.max(0.0) * 10_000_000.0) as i64;
+    s.TryChangePlaybackPositionAsync(ticks)?.get()
+}
+
+#[tauri::command]
+pub async fn media_seek(seconds: f64) -> Result<(), String> {
+    let accepted = tauri::async_runtime::spawn_blocking(move || seek(seconds))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+    if accepted {
+        Ok(())
+    } else {
+        Err("This player doesn't allow seeking".into())
+    }
 }
