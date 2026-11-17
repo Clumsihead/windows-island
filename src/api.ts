@@ -27,6 +27,17 @@ export type Media = {
   canSeek: boolean;
 };
 export type Audio = { volume: number; muted: boolean };
+export type BatteryInfo = { hasBattery: boolean; percent: number; charging: boolean; pluggedIn: boolean };
+export type WifiRaw = { networks: string; interfaces: string; profiles: string };
+export type BtDevice = {
+  id: string;
+  name: string;
+  connected: boolean;
+  kind: "audio" | "phone" | "computer" | "input" | "other";
+  address: string;
+};
+export type AudioDevice = { id: string; name: string; isDefault: boolean };
+export type AudioDevices = { outputs: AudioDevice[]; inputs: AudioDevice[] };
 export type Radios = { wifi: boolean | null; bluetooth: boolean | null };
 export type NetInfo = { kind: string; name: string };
 export type Clip = {
@@ -72,6 +83,17 @@ export const api = {
   mediaArt: () => invoke<string | null>("media_art"),
   mediaControl: (action: "toggle" | "next" | "prev") => invoke("media_control", { action }),
   mediaSeek: (seconds: number) => invoke("media_seek", { seconds }),
+  // Controls tab panels
+  battery: () => invoke<BatteryInfo>("battery_get"),
+  wifiScan: () => invoke<WifiRaw>("wifi_scan"),
+  wifiConnect: (ssid: string, password: string | null, security: string, saved: boolean) =>
+    invoke("wifi_connect", { ssid, password, security, saved }),
+  wifiDisconnect: () => invoke("wifi_disconnect"),
+  wifiForget: (name: string) => invoke("wifi_forget", { name }),
+  bluetoothDevices: () => invoke<BtDevice[]>("bluetooth_devices"),
+  setBluetooth: (address: string, connect: boolean) => invoke("bluetooth_set_connected", { address, connect }),
+  audioDevices: () => invoke<AudioDevices>("audio_devices"),
+  setDefaultAudio: (id: string) => invoke("audio_set_default", { id }),
   audio: () => invoke<Audio | null>("audio_get"),
   audioDevice: () => invoke<string | null>("audio_device"),
   setVolume: (volume: number) => invoke("audio_set_volume", { volume }),

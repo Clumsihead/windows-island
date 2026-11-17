@@ -1,6 +1,6 @@
 [package]
 name = "windows-island"
-version = "0.4.8"
+version = "0.4.7"
 edition = "2021"
 
 [build-dependencies]
@@ -28,6 +28,7 @@ features = [
   "Media_Control",
   "Storage_Streams",
   "Devices_Radios",
+  "Devices_Bluetooth",
   "Win32_Foundation",
   "Win32_Media_Audio",
   "Win32_Media_Audio_Endpoints",

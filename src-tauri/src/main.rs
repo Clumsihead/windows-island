@@ -3,6 +3,7 @@
 mod apps;
 mod audio;
 mod clipboard;
+mod devices;
 mod foreground;
 mod gpu;
 mod hw;
@@ -13,8 +14,10 @@ mod radio;
 mod settings;
 mod stats;
 mod system;
+mod textutil;
 mod tray;
 mod updater;
+mod winsys;
 
 use tauri::{Manager, RunEvent, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
@@ -85,6 +88,15 @@ fn main() {
             media::media_art,
             media::media_control,
             media::media_seek,
+            devices::battery_get,
+            devices::audio_devices,
+            devices::audio_set_default,
+            devices::bluetooth_devices,
+            devices::bluetooth_set_connected,
+            devices::wifi_scan,
+            devices::wifi_connect,
+            devices::wifi_disconnect,
+            devices::wifi_forget,
             audio::audio_get,
             audio::audio_set_volume,
             audio::audio_toggle_mute,

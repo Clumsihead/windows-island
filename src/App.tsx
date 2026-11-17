@@ -40,6 +40,8 @@ const TABS: { name: Tab; w: number; h: number }[] = [
 ];
 const PEEK = { w: 456, h: 180 };
 const COMPACT_H = 32;
+// Island height while a Controls panel is open. The window is 760px tall, so keep these below that.
+const PANEL_H = { wifi: 738, bluetooth: 640, audio: 640 } as const;
 // In "Everywhere" mode, with another app in front, the notch slides up until only this much of its
 // bottom edge (logical px) is left showing at the top of the screen.
 const TUCK_SHOW = 5;
@@ -173,7 +175,10 @@ export default function App() {
   // The morph
   const playing = media.available && media.playing;
   const mode: Mode = !expanded ? "compact" : view === "peek" && media.available ? "peek" : "full";
-  const size = TABS.find((t) => t.name === tab)!;
+  const [controlsPanel, setControlsPanel] = useState<keyof typeof PANEL_H | null>(null);
+  const base = TABS.find((t) => t.name === tab)!;
+  // Controls grows when one of its panels (Wi-Fi, Bluetooth...) is open. Must stay under the window's 760px height.
+  const size = tab === "Controls" && controlsPanel ? { ...base, h: PANEL_H[controlsPanel] } : base;
   const tuckedNow = tucked && !expanded; // only the bottom edge shows
   const target: Box =
     mode === "compact"
@@ -244,7 +249,7 @@ export default function App() {
               </nav>
             </header>
             <section className="content" key={tab}>
-              {tab === "Controls" && <Controls {...tabProps} media={media} art={art} />}
+              {tab === "Controls" && <Controls {...tabProps} media={media} art={art} onPanel={setControlsPanel} />}
               {tab === "Today" && <Today {...tabProps} />}
               {tab === "Stats" && <StatsTab />}
               {tab === "Clipboard" && <ClipboardTab {...tabProps} />}
