@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Bluetooth, ExternalLink, Headphones, Laptop, Lock, Mic, Moon, Mouse, RefreshCw, Smartphone, Speaker, Trash2, Wifi,
+  Bluetooth, ExternalLink, Headphones, Laptop, Lock, Mic, Mouse, RefreshCw, Smartphone, Speaker, Trash2, Wifi,
 } from "lucide-react";
 import { api, AudioDevice, AudioDevices, BtDevice, WifiRaw } from "../api";
 import { parseWifi, WifiNet } from "../wifi";
-import { PillSlider } from "../ui";
 
 type PanelProps = { flash: (m: string) => void; onSettings: () => void };
 
@@ -256,33 +255,5 @@ export function AudioPanel({ onSettings }: PanelProps) {
       </div>
       {(problem || error) && <div className="perr">{problem ?? error}</div>}
     </Shell>
-  );
-}
-
-// ======================================================================= Night light
-
-/** Strength of the island's warm-colour filter. Dragging the bar turns it on so you can see the effect. */
-export function NightPanel({
-  strength, onChange, onSettings,
-}: { strength: number; onChange: (v: number) => void; onSettings: () => void }) {
-  return (
-    <div className="cpanel">
-      <div className="cpanel-head">
-        <div>
-          <b>Night light</b>
-          <small>Warmer colours, easier on the eyes</small>
-        </div>
-        <div className="cpanel-actions">
-          <button className="icon-btn" onClick={onSettings} aria-label="Open Windows Night Light settings" title="Windows' own Night Light settings">
-            <ExternalLink size={16} />
-          </button>
-        </div>
-      </div>
-      <div className="night-row">
-        <span className="night-label">Strength</span>
-        <PillSlider label="Night light strength" icon={<Moon size={16} />} value={strength} onChange={onChange} />
-      </div>
-      <small className="night-note">This is the island's own filter. It's separate from Windows' Night Light, so don't use both at once.</small>
-    </div>
   );
 }

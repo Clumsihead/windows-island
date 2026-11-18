@@ -3,7 +3,6 @@
 mod apps;
 mod audio;
 mod clipboard;
-mod colormath;
 mod devices;
 mod foreground;
 mod gpu;
@@ -11,7 +10,6 @@ mod hw;
 mod icons;
 mod island;
 mod media;
-mod nightlight;
 mod radio;
 mod settings;
 mod stats;
@@ -90,7 +88,6 @@ fn main() {
             media::media_art,
             media::media_control,
             media::media_seek,
-            nightlight::night_set,
             devices::battery_get,
             devices::audio_devices,
             devices::audio_set_default,
@@ -161,7 +158,6 @@ fn main() {
             foreground::start(handle.clone());
             updater::start(handle.clone());
             hw::start_brightness_watcher(handle.clone());
-            nightlight::start(handle.clone());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -176,7 +172,6 @@ fn main() {
 
     app.run(|handle, event| {
         if let RunEvent::Exit = event {
-            nightlight::reset(); // never leave the screen tinted behind
             handle
                 .state::<island::Island>()
                 .foreground_running
