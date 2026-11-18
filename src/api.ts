@@ -56,7 +56,7 @@ export type UpdateInfo = { version: string; notes: string | null };
 export type SizeKey = "small" | "medium" | "large";
 // "desktop": only on the desktop.  "peek": everywhere, but only a thin edge shows over other apps.
 export type Visibility = "desktop" | "peek";
-export type Settings = { size: SizeKey; visibility: Visibility; autoUpdate: boolean };
+export type Settings = { size: SizeKey; visibility: Visibility; autoUpdate: boolean; nightEnabled: boolean; nightStrength: number };
 export type UpdaterStatus = { configured: boolean; current: string; lastChecked: number | null; lastResult: string };
 
 export const EMPTY_MEDIA: Media = {
@@ -94,6 +94,7 @@ export const api = {
   setBluetooth: (address: string, connect: boolean) => invoke("bluetooth_set_connected", { address, connect }),
   audioDevices: () => invoke<AudioDevices>("audio_devices"),
   setDefaultAudio: (id: string) => invoke("audio_set_default", { id }),
+  setNight: (enabled: boolean, strength: number) => invoke("night_set", { enabled, strength }),
   audio: () => invoke<Audio | null>("audio_get"),
   audioDevice: () => invoke<string | null>("audio_device"),
   setVolume: (volume: number) => invoke("audio_set_volume", { volume }),

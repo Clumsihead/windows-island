@@ -20,6 +20,15 @@ pub struct Settings {
     /// install a found update right after launch (false = just tell the user)
     #[serde(default)]
     pub auto_update: bool,
+    /// the island's own night-light filter (see nightlight.rs)
+    #[serde(default)]
+    pub night_enabled: bool,
+    #[serde(default = "default_night_strength")]
+    pub night_strength: u8,
+}
+
+fn default_night_strength() -> u8 {
+    35
 }
 
 fn default_visibility() -> String {
@@ -28,7 +37,13 @@ fn default_visibility() -> String {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { size: "medium".into(), visibility: default_visibility(), auto_update: false }
+        Self {
+            size: "medium".into(),
+            visibility: default_visibility(),
+            auto_update: false,
+            night_enabled: false,
+            night_strength: default_night_strength(),
+        }
     }
 }
 
@@ -100,6 +115,18 @@ pub fn set_size(app: &AppHandle, size: &str) -> Result<(), String> {
     sync_menu(app);
     let _ = app.emit("settings:changed", snapshot);
     Ok(())
+}
+
+pub fn set_night(app: &AppHandle, enabled: bool, strength: u8) {
+    let snapshot = {
+        let st = app.state::<SettingsState>();
+        let mut cur = st.current.lock().unwrap();
+        cur.night_enabled = enabled;
+        cur.night_strength = strength.min(100);
+        cur.clone()
+    };
+    save(app, &snapshot);
+    let _ = app.emit("settings:changed", snapshot);
 }
 
 pub fn set_visibility(app: &AppHandle, mode: &str) -> Result<(), String> {
