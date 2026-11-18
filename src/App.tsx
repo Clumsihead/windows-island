@@ -41,7 +41,7 @@ const TABS: { name: Tab; w: number; h: number }[] = [
 const PEEK = { w: 456, h: 180 };
 const COMPACT_H = 32;
 // Island height while a Controls panel is open. The window is 760px tall, so keep these below that.
-const PANEL_H = { wifi: 738, bluetooth: 640, audio: 640 } as const;
+const PANEL_H = { wifi: 738, bluetooth: 640, audio: 640, night: 432 } as const;
 // In "Everywhere" mode, with another app in front, the notch slides up until only this much of its
 // bottom edge (logical px) is left showing at the top of the screen.
 const TUCK_SHOW = 5;

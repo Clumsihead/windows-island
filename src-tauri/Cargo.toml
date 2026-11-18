@@ -1,6 +1,6 @@
 [package]
 name = "windows-island"
-version = "0.4.10"
+version = "0.4.7"
 edition = "2021"
 
 [build-dependencies]
@@ -44,6 +44,8 @@ features = [
   "Win32_UI_Shell_PropertiesSystem",
   "Win32_UI_WindowsAndMessaging",
   "Win32_Graphics_Dwm",
+  "Win32_Graphics_Gdi",
+  "Win32_UI_ColorSystem",
   "Networking_Connectivity", 
   "Media_Devices", 
   "Devices_Enumeration", 
