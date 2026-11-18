@@ -80,6 +80,9 @@ try {
 
     # ---------------------------------------------------------------- update or just push?
     $release = -not $NoRelease
+    $redo = $false
+    $latestTagged = $false
+    $draftOnGitHub = $false
     if ($release -and -not $Version -and $doCommit) {
         $release = YesNo "`nSend this out as an update to your friends? (No = just save it to GitHub)" $true
     }
@@ -119,14 +122,39 @@ try {
         }
         $Version = $Version.TrimStart("v")
         if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Use a version like 0.6.0 (three numbers)." }
-        if ([version]$Version -le $base) { throw "The version has to go up. The latest so far is $base, so use something higher (like $suggest)." }
-        if (GitOut tag --list "v$Version") { throw "A release called v$Version already exists." }
+
+        if ([version]$Version -eq $base) {
+            # Same as the latest version: this is a redo of a release that never got published.
+            $latestTagged = [bool](GitOut tag --list "v$Version")
+            $draftOnGitHub = $false
+            $ghKnows = $false
+            if (Get-Command gh -ErrorAction SilentlyContinue) {
+                $json = & gh release view "v$Version" --json isDraft 2>$null
+                if ($LASTEXITCODE -eq 0 -and $json) {
+                    $ghKnows = $true
+                    if (-not ($json | ConvertFrom-Json).isDraft) {
+                        throw "v$Version is already PUBLISHED on GitHub, so friends may have it. Use a higher version (like $suggest) instead."
+                    }
+                    $draftOnGitHub = $true
+                }
+            }
+            if (-not $ghKnows) {
+                Say "`nv$Version already exists as the latest version." "Yellow"
+                if (-not (YesNo "Was it never published (so nobody has it)? Redo it under the same number?" $false)) {
+                    throw "Pick a higher version (like $suggest)."
+                }
+            }
+            $redo = $true
+        }
+        elseif ([version]$Version -lt $base) { throw "The version has to go up. The latest so far is $base, so use something higher (like $suggest)." }
+        elseif (GitOut tag --list "v$Version") { throw "A release called v$Version already exists." }
     }
 
     # ---------------------------------------------------------------- confirm
     Say "`nHere's what will happen:" "Cyan"
     if ($doCommit) { Say "  1. Commit your changes: ""$Message""" }
-    if ($release) { Say "  2. Set the version to $Version and tag it v$Version" }
+    if ($release -and $redo) { Say "  2. Redo v${Version} - remove the old unpublished v${Version} (tag and draft), then tag it again on your latest commit" }
+    elseif ($release) { Say "  2. Set the version to $Version and tag it v$Version" }
     Say "  3. Push to GitHub ($branch)"
     if ($release) { Say "  4. GitHub builds the installer; you publish it, and your friends' apps update themselves" }
     if (-not (YesNo "`nGo ahead?" $true)) { Say "Cancelled. Nothing was changed."; exit 0 }
@@ -146,6 +174,19 @@ try {
 
     # ---------------------------------------------------------------- version bump + tag
     if ($release) {
+        if ($redo) {
+            # clear out the unpublished attempt so the same number can be used again
+            if (GitOut tag --list "v$Version") { RunGit tag -d "v$Version" }
+            if (GitOut ls-remote --tags origin "refs/tags/v$Version") { RunGit push origin --delete "v$Version" }
+            if ($draftOnGitHub) {
+                & gh release delete "v$Version" --yes 2>$null
+                if ($LASTEXITCODE -ne 0) { Say "Couldn't delete the old draft v$Version on GitHub. Please delete it by hand in Releases." "Yellow" }
+            }
+            elseif (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+                Say "If GitHub still shows an old draft called v$Version under Releases, delete it by hand before publishing." "Yellow"
+            }
+        }
+
         $touched = @()
 
         $re = New-Object System.Text.RegularExpressions.Regex('(?m)^version\s*=\s*"[^"]*"')
@@ -177,7 +218,9 @@ try {
         }
 
         foreach ($f in $touched) { RunGit add -- $f }
-        RunGit commit -m "Release v$Version"
+        # on a redo the files already carry this version, so there may be nothing new to commit
+        & git diff --cached --quiet
+        if ($LASTEXITCODE -ne 0) { RunGit commit -m "Release v$Version" }
         RunGit tag "v$Version"
     }
 
