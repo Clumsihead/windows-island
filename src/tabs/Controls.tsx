@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Bluetooth, ChevronDown, ChevronUp, Moon, Sun, Volume, Volume1, Volume2, VolumeX, Wifi } from "lucide-react";
 import { api, Audio, BatteryInfo, Media, NetInfo, onBrightness, Radios } from "../api";
-import { AudioPanel, BluetoothPanel, NightPanel, WifiPanel } from "./Panels";
+import { AudioPanel, BluetoothPanel, WifiPanel } from "./Panels";
 import { usePoll } from "../hooks";
 import { PillSlider } from "../ui";
 import MediaCard from "../media";
@@ -96,7 +96,7 @@ export default function Controls({
   const [dark, setDark] = useState(false);
   const [airSaved, setAirSaved] = useState<AirSaved | null>(loadAir);
   // which expandable panel is open under the tiles (one at a time). Chevrons toggle these.
-  const [panel, setPanel] = useState<null | "wifi" | "bluetooth" | "audio" | "night">(null);
+  const [panel, setPanel] = useState<null | "wifi" | "bluetooth" | "audio">(null);
   const [battery, setBattery] = useState<BatteryInfo | null>(null);
   useEffect(() => {
     let alive = true;
@@ -105,25 +105,7 @@ export default function Controls({
     const id = setInterval(load, 20000);
     return () => { alive = false; clearInterval(id); };
   }, []);
-  const togglePanel = (p: "wifi" | "bluetooth" | "audio" | "night") => setPanel((cur) => (cur === p ? null : p));
-
-  // the island's own night-light filter. The screen is changed ~60ms after you stop moving the bar.
-  const [night, setNight] = useState({ enabled: false, strength: 35 });
-  const nightTimer = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    api.getSettings().then((s) => setNight({ enabled: !!s.nightEnabled, strength: s.nightStrength ?? 35 })).catch(() => {});
-    return () => window.clearTimeout(nightTimer.current);
-  }, []);
-  const applyNight = (enabled: boolean, strength: number) => {
-    setNight({ enabled, strength });
-    window.clearTimeout(nightTimer.current);
-    nightTimer.current = window.setTimeout(() => {
-      api.setNight(enabled, strength).catch((e) => {
-        setNight((n) => ({ ...n, enabled: false })); // the display didn't take it: show it as off
-        flash(String(e));
-      });
-    }, 60);
-  };
+  const togglePanel = (p: "wifi" | "bluetooth" | "audio") => setPanel((cur) => (cur === p ? null : p));
   useEffect(() => { onPanel?.(panel); }, [panel, onPanel]);
   const [vol, setVol] = useState(0);
   const [bright, setBright] = useState<number | null>(null);
@@ -261,7 +243,6 @@ export default function Controls({
       {panel === "wifi" && <WifiPanel flash={flash} onSettings={() => open("wifi")} />}
       {panel === "bluetooth" && <BluetoothPanel flash={flash} onSettings={() => open("bluetooth")} />}
       {panel === "audio" && <AudioPanel flash={flash} onSettings={() => open("sound")} />}
-      {panel === "night" && <NightPanel strength={night.strength} onChange={(v) => applyNight(true, v)} onSettings={() => open("nightlight")} />}
 
       {!panel && (
         <>
