@@ -44,7 +44,10 @@ export default function Apps({ flash, collapse }: TabProps) {
     const out: Section[] = [];
 
     if (!needle) {
-      const recentPaths = Array.from(new Set([...favs, ...recents])).filter((p) => byPath.has(p)).slice(0, 6);
+      // Starred apps have their own section, so keep them out of RECENT.
+      const recentPaths = Array.from(new Set(recents)).filter((p) => byPath.has(p) && !favs.includes(p)).slice(0, 6);
+      const starred = favs.filter((p) => byPath.has(p)).slice(0, 4);
+      if (starred.length) out.push({ title: "STARRED", rows: starred.map((p) => appRow(byPath.get(p)!)) });
       if (recentPaths.length) out.push({ title: "RECENT", rows: recentPaths.map((p) => appRow(byPath.get(p)!)) });
       out.push({ title: "APPLICATIONS", rows: all.slice(0, 40).map(appRow) });
       out.push({ title: "SNIPPETS", rows: snippets.map(snipRow), action: "newSnippet" });
@@ -61,7 +64,7 @@ export default function Apps({ flash, collapse }: TabProps) {
   }, [q, all, files, favs, recents, snippets]);
 
   const flat = useMemo(() => sections.flatMap((s) => s.rows), [sections]);
-  const icon = useIcons(flat.map((r) => r.path), 40);
+  const icon = useIcons(flat.map((r) => r.path), 48);
 
   useEffect(() => setSel(0), [q]);
   useEffect(() => {
@@ -101,7 +104,7 @@ export default function Apps({ flash, collapse }: TabProps) {
         <span className="hint">Ctrl+Alt+A</span>
       </div>
 
-      <div className="alist" ref={listRef}>
+      <div className="alist" ref={listRef} data-scroll>
         {sections.map((s) => (
           <div key={s.title}>
             <div className="sec">
@@ -126,20 +129,28 @@ export default function Apps({ flash, collapse }: TabProps) {
                 <div key={r.key} className={`arow2 ${on ? "sel" : ""}`} onMouseMove={() => sel !== i && setSel(i)} onClick={() => run(r)}>
                   <span className="aico">{img ? <img src={img} alt="" /> : r.name.slice(0, 1).toUpperCase()}</span>
                   <span className="aname">{r.name}</span>
-                  {on ? (
-                    <span className="aact">
-                      <small>↵ {r.kind === "snippet" ? "Paste" : "Open"}</small>
-                      {r.kind === "app" && (
-                        <button aria-label="Favorite" onClick={(e) => { e.stopPropagation(); setFavs((p) => (p.includes(r.path!) ? p.filter((x) => x !== r.path) : [...p, r.path!])); }}>
-                          <Star size={19} fill={favs.includes(r.path!) ? "currentColor" : "none"} />
-                        </button>
-                      )}
-                      {r.kind === "snippet" && (
-                        <button aria-label="Delete snippet" onClick={(e) => { e.stopPropagation(); setSnippets((p) => p.filter((x) => x.id !== r.id)); }}><Trash2 size={17} /></button>
-                      )}
-                    </span>
-                  ) : (
-                    <small className="alabel">{label[r.kind]}</small>
+                  {on && <small className="aact-hint">↵ {r.kind === "snippet" ? "Paste" : "Open"}</small>}
+                  <small className="alabel">{label[r.kind]}</small>
+                  {r.kind === "app" && (
+                    <button
+                      className={`astar ${favs.includes(r.path!) ? "on" : ""}`}
+                      aria-label={favs.includes(r.path!) ? "Remove from starred" : "Star"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFavs((p) => (p.includes(r.path!) ? p.filter((x) => x !== r.path) : [...p, r.path!]));
+                      }}
+                    >
+                      <Star size={18} fill={favs.includes(r.path!) ? "currentColor" : "none"} />
+                    </button>
+                  )}
+                  {on && r.kind === "snippet" && (
+                    <button
+                      className="astar"
+                      aria-label="Delete snippet"
+                      onClick={(e) => { e.stopPropagation(); setSnippets((p) => p.filter((x) => x.id !== r.id)); }}
+                    >
+                      <Trash2 size={17} />
+                    </button>
                   )}
                 </div>
               );

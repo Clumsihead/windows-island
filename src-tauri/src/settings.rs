@@ -10,6 +10,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 pub const SIZES: [&str; 3] = ["small", "medium", "large"];
 /// "desktop": only on the desktop.  "peek": everywhere, but tucked to a thin edge over other apps.
 pub const VISIBILITIES: [&str; 2] = ["desktop", "peek"];
+/// What the island does while an app is full screen (F11 in a browser, a video, a game).
+pub const FULLSCREEN_MODES: [&str; 2] = ["visible", "hidden"];
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +19,9 @@ pub struct Settings {
     pub size: String,
     #[serde(default = "default_visibility")]
     pub visibility: String,
+    /// "visible": the island behaves as usual over a full-screen app.  "hidden": it stays out of sight.
+    #[serde(default = "default_fullscreen")]
+    pub fullscreen: String,
     /// install a found update right after launch (false = just tell the user)
     #[serde(default)]
     pub auto_update: bool,
@@ -35,11 +40,16 @@ fn default_visibility() -> String {
     "peek".into()
 }
 
+fn default_fullscreen() -> String {
+    "visible".into()
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
             size: "medium".into(),
             visibility: default_visibility(),
+            fullscreen: default_fullscreen(),
             auto_update: false,
             night_enabled: false,
             night_strength: default_night_strength(),
@@ -54,6 +64,8 @@ pub struct SettingsState {
     pub menu: Mutex<Vec<(String, CheckMenuItem<tauri::Wry>)>>,
     /// Same for the "Visibility" submenu.
     pub vis_menu: Mutex<Vec<(String, CheckMenuItem<tauri::Wry>)>>,
+    /// And for the "In full screen" submenu.
+    pub fs_menu: Mutex<Vec<(String, CheckMenuItem<tauri::Wry>)>>,
 }
 
 fn file(app: &AppHandle) -> Option<PathBuf> {
@@ -69,6 +81,9 @@ pub fn load(app: &AppHandle) {
         if !VISIBILITIES.contains(&s.visibility.as_str()) {
             s.visibility = default_visibility();
         }
+        if !FULLSCREEN_MODES.contains(&s.fullscreen.as_str()) {
+            s.fullscreen = default_fullscreen();
+        }
         if SIZES.contains(&s.size.as_str()) {
             *app.state::<SettingsState>().current.lock().unwrap() = s;
         }
@@ -76,6 +91,8 @@ pub fn load(app: &AppHandle) {
     // Hand the saved visibility mode to the island (it applies on the first foreground check).
     let desktop_only = app.state::<SettingsState>().current.lock().unwrap().visibility == "desktop";
     app.state::<crate::island::Island>().desktop_only.store(desktop_only, std::sync::atomic::Ordering::SeqCst);
+    let hide_fs = app.state::<SettingsState>().current.lock().unwrap().fullscreen == "hidden";
+    app.state::<crate::island::Island>().hide_in_fullscreen.store(hide_fs, std::sync::atomic::Ordering::SeqCst);
 }
 
 fn save(app: &AppHandle, s: &Settings) {
@@ -98,6 +115,10 @@ pub fn sync_menu(app: &AppHandle) {
     let vis = st.current.lock().unwrap().visibility.clone();
     for (key, item) in st.vis_menu.lock().unwrap().iter() {
         let _ = item.set_checked(key.as_str() == vis);
+    }
+    let fs = st.current.lock().unwrap().fullscreen.clone();
+    for (key, item) in st.fs_menu.lock().unwrap().iter() {
+        let _ = item.set_checked(key.as_str() == fs);
     }
 }
 
@@ -146,6 +167,23 @@ pub fn set_visibility(app: &AppHandle, mode: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub fn set_fullscreen(app: &AppHandle, mode: &str) -> Result<(), String> {
+    if !FULLSCREEN_MODES.contains(&mode) {
+        return Err("Unknown full-screen mode".into());
+    }
+    let snapshot = {
+        let st = app.state::<SettingsState>();
+        let mut cur = st.current.lock().unwrap();
+        cur.fullscreen = mode.to_string();
+        cur.clone()
+    };
+    save(app, &snapshot);
+    crate::island::set_hide_in_fullscreen(app, mode == "hidden");
+    sync_menu(app);
+    let _ = app.emit("settings:changed", snapshot);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn settings_get(st: State<'_, SettingsState>) -> Settings {
     st.current.lock().unwrap().clone()
@@ -159,6 +197,11 @@ pub fn set_island_size(app: AppHandle, size: String) -> Result<(), String> {
 #[tauri::command]
 pub fn set_visibility_mode(app: AppHandle, mode: String) -> Result<(), String> {
     set_visibility(&app, &mode)
+}
+
+#[tauri::command]
+pub fn set_fullscreen_mode(app: AppHandle, mode: String) -> Result<(), String> {
+    set_fullscreen(&app, &mode)
 }
 
 #[tauri::command]

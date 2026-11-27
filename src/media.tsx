@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Music2, Pause, Play, SkipBack, SkipForward, Volume2 } from "lucide-react";
+import { Music2, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { api, Media } from "./api";
 import { mmss } from "./hooks";
 
@@ -19,9 +19,33 @@ function usePosition(m: Media) {
   return m.duration > 0 ? Math.min(pos, m.duration) : pos;
 }
 
+/** The progress line is a wave: half a wavelength per segment, peaks 2.4px off the centre. */
+const WAVE_H = 14;
+const WAVE_HALF = 8;
+const WAVE_AMP = 2.4;
+
+function wavePath(w: number) {
+  const mid = WAVE_H / 2;
+  const n = Math.max(1, Math.ceil(w / WAVE_HALF));
+  let d = `M0 ${mid} Q ${WAVE_HALF / 2} ${mid - WAVE_AMP * 2} ${WAVE_HALF} ${mid}`;
+  for (let i = 1; i < n; i++) d += ` T${WAVE_HALF * (i + 1)} ${mid}`;
+  return d;
+}
+
 export function WaveProgress({ media }: { media: Media }) {
   const livePos = usePosition(media);
   const trackRef = useRef<HTMLDivElement>(null);
+  // The wave is drawn at the track's real pixel width, so it keeps its shape (not stretched) in both cards.
+  const [trackW, setTrackW] = useState(0);
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const read = () => setTrackW(el.clientWidth);
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [drag, setDrag] = useState<number | null>(null); // 0..1 while the bar is being dragged
   const [seeked, setSeeked] = useState<{ pos: number; at: number } | null>(null);
   const [, tick] = useState(0);
@@ -71,6 +95,7 @@ export function WaveProgress({ media }: { media: Media }) {
       ? seeked.pos + (media.playing ? (performance.now() - seeked.at) / 1000 : 0)
       : livePos;
   const pct = media.duration > 0 ? Math.min(100, Math.max(0, (pos / media.duration) * 100)) : 0;
+  const d = wavePath(trackW);
 
   return (
     <div className={`wp ${canSeek ? "can-seek" : ""} ${drag !== null ? "dragging" : ""}`}>
@@ -118,8 +143,15 @@ export function WaveProgress({ media }: { media: Media }) {
           jumpTo(pos + (e.key === "ArrowRight" ? 5 : -5));
         }}
       >
-        <div className="wp-line" />
-        <div className={`wp-wave ${media.playing ? "on" : ""}`} style={{ width: `${pct}%` }} />
+        <svg className="wp-wave" width={trackW} height={WAVE_H} aria-hidden>
+          <path className="wp-line" d={d} pathLength={trackW || 1} />
+          <path
+            className="wp-fill"
+            d={d}
+            pathLength={trackW || 1}
+            style={{ strokeDasharray: `${(pct / 100) * (trackW || 0)} ${trackW || 1}` }}
+          />
+        </svg>
         <i className="wp-dot" style={{ left: `${pct}%` }} />
       </div>
       <span className="wp-t">{media.duration > 0 ? mmss(media.duration) : "--:--"}</span>
@@ -176,11 +208,7 @@ export default function MediaCard({
   }
   return (
     <div className="mcard wide">
-      {device && (
-        <div className="mc-device">
-          <Volume2 size={14} /> {device}
-        </div>
-      )}
+      {device && <div className="mc-device">{device}</div>}
       <div className="mc-row">
         <Art art={art} />
         <Text media={media} />

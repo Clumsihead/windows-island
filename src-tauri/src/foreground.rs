@@ -22,10 +22,11 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::WindowsAndMessaging::{
     GetClassNameW, GetDesktopWindow, GetSystemMetrics, GetWindow, GetWindowLongPtrW, GetWindowRect,
     GetWindowTextLengthW, GetWindowThreadProcessId, GetForegroundWindow, IsIconic, IsWindowVisible, GWL_EXSTYLE, GW_CHILD,
-    GW_HWNDNEXT, SM_CXSCREEN, SM_CYSCREEN, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+    GW_HWNDNEXT, GWL_STYLE, SM_CXSCREEN, SM_CYSCREEN, WS_CAPTION, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_EX_TRANSPARENT,
 };
 
-use crate::island::{apply_visibility, Island};
+use crate::island::{apply_visibility, set_fullscreen_active, Island};
 
 /// Set by `recheck` to commit the next sample immediately (no debounce).
 static FAST: AtomicBool = AtomicBool::new(false);
@@ -100,9 +101,16 @@ fn exe_of(pid: u32) -> String {
     full.rsplit(['\\', '/']).next().unwrap_or_default().to_string()
 }
 
-/// If `h` is a real application window that covers part of the primary monitor,
-/// returns a short description of it (used for logging).
-fn blocks(h: HWND, screen_w: i32, screen_h: i32, own_pid: u32) -> Option<String> {
+/// A real application window that covers part of the primary monitor.
+struct Blocker {
+    /// short description, used for logging
+    desc: String,
+    /// It fills the whole screen with no title bar: F11 in a browser, a video, a game.
+    fullscreen: bool,
+}
+
+/// If `h` is a real application window that covers part of the primary monitor, describes it.
+fn blocks(h: HWND, screen_w: i32, screen_h: i32, own_pid: u32) -> Option<Blocker> {
     if !unsafe { IsWindowVisible(h) }.as_bool() || unsafe { IsIconic(h) }.as_bool() {
         return None;
     }
@@ -146,11 +154,19 @@ fn blocks(h: HWND, screen_w: i32, screen_h: i32, own_pid: u32) -> Option<String>
     if exe.eq_ignore_ascii_case("msedgewebview2.exe") {
         return None;
     }
-    Some(format!("{class} ({exe})"))
+    // Full screen = covers the entire primary monitor (a maximised window stops at the taskbar and
+    // has a title bar, so it doesn't qualify) and has dropped its caption.
+    let style = unsafe { GetWindowLongPtrW(h, GWL_STYLE) } as u32;
+    let fullscreen = r.left <= 0
+        && r.top <= 0
+        && r.right >= screen_w
+        && r.bottom >= screen_h
+        && style & WS_CAPTION.0 != WS_CAPTION.0;
+    Some(Blocker { desc: format!("{class} ({exe})"), fullscreen })
 }
 
-/// Walks every top-level window, top of the Z-order down.
-fn find_blocker() -> Option<String> {
+/// Walks every top-level window, top of the Z-order down, and returns the front-most real app window.
+fn find_blocker() -> Option<Blocker> {
     let (sw, sh) = unsafe { (GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)) };
     let own = std::process::id();
     let mut cur = unsafe { GetWindow(GetDesktopWindow(), GW_CHILD) }.hwnd();
@@ -193,12 +209,29 @@ pub fn start(app: AppHandle) {
             let mut committed: Option<bool> = None;
             let mut pending: Option<(bool, u32)> = None;
             let mut last_fg: isize = 0;
+            // Full-screen state gets the same kind of debounce, so a window flickering through the
+            // F11 transition doesn't flash the island.
+            let mut fs_committed = false;
+            let mut fs_count = 0u32;
 
             while running.load(SeqCst) {
                 record_foreground(&app, &mut last_fg);
                 let blocker = find_blocker();
                 let desktop = blocker.is_none();
                 let fast = FAST.swap(false, SeqCst);
+
+                let fs = blocker.as_ref().is_some_and(|b| b.fullscreen);
+                if fs == fs_committed {
+                    fs_count = 0;
+                } else {
+                    fs_count += 1;
+                    if fast || fs_count >= 2 {
+                        fs_committed = fs;
+                        fs_count = 0;
+                        eprintln!("[island] full screen = {fs}");
+                        set_fullscreen_active(&app, fs);
+                    }
+                }
 
                 if committed == Some(desktop) {
                     pending = None;
@@ -221,7 +254,7 @@ pub fn start(app: AppHandle) {
                         pending = None;
                         eprintln!(
                             "[island] desktop showing = {desktop}  ({})",
-                            blocker.as_deref().unwrap_or("no application windows open")
+                            blocker.as_ref().map_or("no application windows open", |b| b.desc.as_str())
                         );
                         app.state::<Island>().desktop_active.store(desktop, SeqCst);
                         // Always apply (not only on change) so the very first result also

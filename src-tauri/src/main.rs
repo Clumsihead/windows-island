@@ -3,6 +3,7 @@
 mod apps;
 mod audio;
 mod clipboard;
+mod colormath;
 mod devices;
 mod foreground;
 mod gpu;
@@ -10,7 +11,9 @@ mod hw;
 mod icons;
 mod island;
 mod media;
+mod nightlight;
 mod radio;
+mod scroll;
 mod settings;
 mod stats;
 mod system;
@@ -81,6 +84,7 @@ fn main() {
             settings::settings_get,
             settings::set_island_size,
             settings::set_visibility_mode,
+            settings::set_fullscreen_mode,
             settings::set_auto_update,
             island::island_get,
             stats::system_stats,
@@ -88,6 +92,7 @@ fn main() {
             media::media_art,
             media::media_control,
             media::media_seek,
+            media::media_source_exe,
             devices::battery_get,
             devices::audio_devices,
             devices::audio_set_default,
@@ -98,6 +103,7 @@ fn main() {
             devices::wifi_disconnect,
             devices::wifi_forget,
             audio::audio_get,
+            audio::audio_level,
             audio::audio_set_volume,
             audio::audio_toggle_mute,
             radio::radio_get,
@@ -120,6 +126,7 @@ fn main() {
             hw::dark_mode_get,
             hw::dark_mode_set,
             hw::network_info,
+            nightlight::night_set,
             audio::audio_device,
             icons::icons_get,
             clipboard::clipboard_pin,
@@ -155,9 +162,11 @@ fn main() {
             apps::index_in_background(handle.clone());
             clipboard::start(handle.clone());
             island::start_hover_loop(handle.clone());
+            scroll::start(handle.clone());
             foreground::start(handle.clone());
             updater::start(handle.clone());
             hw::start_brightness_watcher(handle.clone());
+            nightlight::start(handle.clone());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -176,6 +185,16 @@ fn main() {
                 .state::<island::Island>()
                 .foreground_running
                 .store(false, std::sync::atomic::Ordering::SeqCst);
+            // Never leave the screen tinted after the island is gone.
+            let night_on = handle
+                .state::<settings::SettingsState>()
+                .current
+                .lock()
+                .map(|s| s.night_enabled)
+                .unwrap_or(false);
+            if night_on {
+                nightlight::reset();
+            }
         }
     });
 }

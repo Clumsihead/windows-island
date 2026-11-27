@@ -4,6 +4,11 @@
   --card: #1b1a14;
   --card2: #23221a;
   --card3: #2c2b22;
+  /* Controls surfaces: neutral greys, so the white icon chips are the accent. */
+  --tile: #242425;
+  --tile2: #2b2b2c;
+  --tile-fill: #373738;   /* slider "played" side */
+  --chip-off: #333334;    /* icon chip of a switched-off tile */
   --olive: #bdb55a;
   --olive-dim: #a49c45;
   --on-olive: #2b2800;
@@ -35,26 +40,53 @@ small { font-size: 12.5px; color: var(--muted); }
 /* A fixed-size canvas, scaled to fit the (smaller or larger) window. The window is resized to match. */
 .stage { position: absolute; left: 0; top: 0; width: 1320px; height: 760px; transform-origin: 0 0; transform: scale(var(--ui, 1)); user-select: none; }
 
-/* ============ the notch: one box, concave "ears" where it meets the top of the screen ============ */
+/* ============ the notch: one surface, concave "ears" where it meets the top of the screen ============ */
 .island {
   position: absolute; top: 0; left: 50%; transform: translateX(-50%);
   max-width: 100%; max-height: 100%; contain: layout style;
   --r: 16px; --ear: 10px;
+  /* The colour layer reaches this far ABOVE the screen edge. The window clips it, so the first pixel row
+     of the screen is always fully inside the shape, whatever the display scaling or spring frame. */
+  --over: 8px;
   transition: transform 360ms var(--ease-io); /* the slide up into / down out of the tucked position */
 }
-/* "Everywhere" mode with another app in front: slide up until only the bottom 5px of the notch shows */
-.island.is-tucked { transform: translateX(-50%) translateY(-27px); }
+/* "Everywhere" mode with another app in front: slide up until only the bottom 8px of the notch shows
+   (notch height 38px - 8px = 30px). Keep in sync with COMPACT_H / TUCK_SHOW in App.tsx. */
+.island.is-tucked { transform: translateX(-50%) translateY(-30px); }
+.island.is-tucked .v-compact { opacity: 0; visibility: hidden; transition: opacity 90ms ease, visibility 0s 90ms; } /* nothing inside may peek out of the sliver */
 .island.is-tucked .body { box-shadow: 0 1px 6px #0009, inset 0 -1px 0 #ffffff30; }
-.island.is-peek { --bg: var(--maroon); }
+/* The island's colour, painted ONCE: the box, both ears and the rounded bottom corners are a single
+   masked layer, so the curves can never drift from the main tile (different colour, a hairline seam,
+   or a doubled-up alpha when the island is see-through). Everything inside (cards, the media glow)
+   is drawn on top of this layer and fades out to it, never to a colour of its own. */
+.shape {
+  position: absolute; top: calc(var(--over) * -1); bottom: 0; left: calc(var(--ear) * -1); right: calc(var(--ear) * -1);
+  background: var(--bg); pointer-events: none;
+  transition: background-color 240ms ease;
+  --solid: #000;
+  --clear: #0000;
+  -webkit-mask:
+    radial-gradient(circle at 0 100%, var(--clear) calc(var(--ear) - 0.5px), var(--solid) var(--ear)) 0 0 / calc(var(--ear) + 1px) calc(var(--ear) + var(--over)) no-repeat,
+    radial-gradient(circle at 100% 100%, var(--clear) calc(var(--ear) - 0.5px), var(--solid) var(--ear)) 100% 0 / calc(var(--ear) + 1px) calc(var(--ear) + var(--over)) no-repeat,
+    linear-gradient(var(--solid), var(--solid)) var(--ear) 0 / calc(100% - var(--ear) * 2) calc(100% - var(--r) + 1px) no-repeat,
+    linear-gradient(var(--solid), var(--solid)) calc(var(--ear) + var(--r) - 1px) 100% / calc(100% - var(--ear) * 2 - var(--r) * 2 + 2px) var(--r) no-repeat,
+    radial-gradient(circle at 100% 0, var(--solid) calc(var(--r) - 0.5px), var(--clear) var(--r)) var(--ear) 100% / var(--r) var(--r) no-repeat,
+    radial-gradient(circle at 0 0, var(--solid) calc(var(--r) - 0.5px), var(--clear) var(--r)) calc(100% - var(--ear)) 100% / var(--r) var(--r) no-repeat;
+  mask:
+    radial-gradient(circle at 0 100%, var(--clear) calc(var(--ear) - 0.5px), var(--solid) var(--ear)) 0 0 / calc(var(--ear) + 1px) calc(var(--ear) + var(--over)) no-repeat,
+    radial-gradient(circle at 100% 100%, var(--clear) calc(var(--ear) - 0.5px), var(--solid) var(--ear)) 100% 0 / calc(var(--ear) + 1px) calc(var(--ear) + var(--over)) no-repeat,
+    linear-gradient(var(--solid), var(--solid)) var(--ear) 0 / calc(100% - var(--ear) * 2) calc(100% - var(--r) + 1px) no-repeat,
+    linear-gradient(var(--solid), var(--solid)) calc(var(--ear) + var(--r) - 1px) 100% / calc(100% - var(--ear) * 2 - var(--r) * 2 + 2px) var(--r) no-repeat,
+    radial-gradient(circle at 100% 0, var(--solid) calc(var(--r) - 0.5px), var(--clear) var(--r)) var(--ear) 100% / var(--r) var(--r) no-repeat,
+    radial-gradient(circle at 0 0, var(--solid) calc(var(--r) - 0.5px), var(--clear) var(--r)) calc(100% - var(--ear)) 100% / var(--r) var(--r) no-repeat;
+}
+/* the content box: clips the faces and casts the shadow, but paints no colour of its own */
 .body {
   position: absolute; inset: 0; overflow: hidden;
   border-radius: 0 0 var(--r) var(--r);
-  background: var(--bg); box-shadow: 0 24px 70px #000c;
-  transition: background-color 240ms ease, box-shadow 300ms ease;
+  box-shadow: 0 24px 70px #000c;
+  transition: box-shadow 300ms ease;
 }
-.ear { position: absolute; top: 0; width: var(--ear); height: var(--ear); pointer-events: none; }
-.ear.l { left: calc(var(--ear) * -1); background: radial-gradient(circle at 0 100%, transparent calc(var(--ear) - 0.5px), var(--bg) var(--ear)); }
-.ear.r { right: calc(var(--ear) * -1); background: radial-gradient(circle at 100% 100%, transparent calc(var(--ear) - 0.5px), var(--bg) var(--ear)); }
 
 /* three faces of the island; only the active one is visible */
 .v-compact, .v-peek, .v-panel {
@@ -67,19 +99,23 @@ small { font-size: 12.5px; color: var(--muted); }
   transition: opacity 240ms ease 90ms, visibility 0s;
 }
 .v-compact {
-  width: 100%; height: 32px; display: flex; align-items: center; justify-content: center; gap: 8px;
-  font-size: 12.5px; font-weight: 500; padding: 0 12px;
+  width: 100%; height: 38px; display: flex; align-items: center; justify-content: center; gap: 14px;
+  padding: 0 20px; cursor: pointer;
 }
-.ctext { font-variant-numeric: tabular-nums; }
-.cart { width: 20px; height: 20px; border-radius: 6px; overflow: hidden; display: grid; place-items: center; background: var(--card3); color: var(--olive); flex: none; }
-.cart img { width: 100%; height: 100%; object-fit: cover; }
-.eq { display: flex; align-items: flex-end; gap: 2px; height: 12px; flex: none; }
-.eq i { width: 3px; border-radius: 2px; background: var(--olive); height: 40%; animation: eq 900ms ease-in-out infinite; }
-.eq i:nth-child(2) { animation-delay: -300ms; } .eq i:nth-child(3) { animation-delay: -600ms; } .eq i:nth-child(4) { animation-delay: -150ms; }
-@keyframes eq { 0%, 100% { height: 25%; } 50% { height: 100%; } }
-.udot { width: 7px; height: 7px; border-radius: 50%; background: var(--olive); box-shadow: 0 0 8px var(--olive); flex: none; }
+/* clock in the middle; the sides hold the level bars and the player's icon */
+.nmid { display: flex; align-items: center; white-space: nowrap; margin: 0 auto; }
+.nside { display: flex; align-items: center; flex: none; width: 34px; }
+.nside.left { justify-content: flex-start; }
+.nside.right { justify-content: flex-end; }
+.ctext { font-size: 19px; font-weight: 600; line-height: 1; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+/* level bars: round dots at rest, bars that follow the audio while something plays */
+.lvl { --eqc: #ff5a1f; display: flex; align-items: center; gap: 3px; height: 20px; }
+.lvl i { width: 4px; height: 4px; border-radius: 2px; background: var(--eqc); transition: height 90ms linear; }
+.src { width: 24px; height: 24px; border-radius: 7px; overflow: hidden; display: grid; place-items: center; color: var(--olive); flex: none; }
+.src img { width: 100%; height: 100%; object-fit: contain; }
+.udot { position: absolute; top: 6px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--olive); box-shadow: 0 0 8px var(--olive); }
 
-.v-peek { width: 456px; height: 180px; cursor: pointer; }
+.v-peek { width: 470px; height: 196px; cursor: pointer; }
 .peek-more { position: absolute; top: 12px; right: 14px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: #d6a99f; background: #ffffff10; }
 .peek-more:hover { background: #ffffff20; }
 
@@ -92,7 +128,9 @@ small { font-size: 12.5px; color: var(--muted); }
 .update-btn { padding: 8px 18px; border-radius: 999px; background: var(--olive); color: var(--on-olive); font-size: 13px; font-weight: 600; white-space: nowrap; }
 .tdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--olive); margin-left: 7px; vertical-align: middle; box-shadow: 0 0 6px var(--olive); }
 .update-btn:disabled { opacity: 0.75; cursor: default; }
-.content { position: absolute; left: 0; right: 0; top: 64px; bottom: 0; padding: 8px 24px 24px; animation: content-in 240ms var(--ease) both; }
+/* Tab switch: the box springs to its new size with a small overshoot and the content catches up. */
+.content { position: absolute; left: 0; right: 0; top: 64px; bottom: 0; padding: 8px 24px 24px; animation: content-swap 260ms cubic-bezier(0.34, 1.4, 0.64, 1) both; }
+@keyframes content-swap { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
 @keyframes content-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .toast { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); padding: 9px 18px; border-radius: 16px; background: var(--card3); font-size: 13px; box-shadow: 0 8px 30px #000a; z-index: 5; white-space: nowrap; }
 
@@ -107,64 +145,76 @@ small { font-size: 12.5px; color: var(--muted); }
 .chip { background: var(--card3); color: #b9b6a6; padding: 6px 12px; border-radius: 10px; font-size: 12.5px; }
 
 /* ============ controls ============ */
-.controls { display: flex; flex-direction: column; gap: 10px; }
+.controls { display: flex; flex-direction: column; gap: 17px; }
 .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.qtile { display: flex; align-items: center; height: 72px; border-radius: 36px; background: var(--card); color: var(--text); transition: background 220ms, color 220ms; overflow: hidden; }
-.qtile.on { background: var(--olive); color: var(--on-olive); }
-.qtile-main { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 12px; padding: 0 8px 0 13px; text-align: left; }
-.qtile-ico { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: #ffffff0f; flex: none; }
-.qtile.on .qtile-ico { background: #00000020; }
-.qtile-text { display: flex; flex-direction: column; min-width: 0; }
-.qtile-text b { font-size: 15px; font-weight: 500; }
-.qtile-text small { color: inherit; opacity: 0.72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.qtile-sep { width: 1px; height: 32px; background: currentColor; opacity: 0.2; }
-.qtile-more { width: 50px; height: 100%; display: grid; place-items: center; color: inherit; }
+.qgrid { display: grid; grid-template-columns: repeat(3, 1fr); column-gap: 14px; row-gap: 14px; }
+/* Neutral tiles. The icon chip is a rounded square: solid light with a black glyph while the tile is
+   on, a dim grey with a grey glyph while it is off. Tiles that open a panel end in a divider + chevron. */
+.qtile { display: flex; align-items: center; height: 86px; border-radius: 24px; background: var(--tile); color: var(--text); transition: background 200ms; overflow: hidden; }
+.qtile:hover { background: var(--tile2); }
+.qtile-main { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 16px; padding: 0 8px 0 15px; text-align: left; }
+.qtile-ico { width: 56px; height: 56px; border-radius: 17px; display: grid; place-items: center; background: var(--chip-off); color: #bdbdbd; flex: none; transition: background 200ms, color 200ms; }
+.qtile.on .qtile-ico { background: #ececec; color: #000; }
+.qtile-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.qtile-text b { font-size: 21px; font-weight: 500; line-height: 1.15; color: #ececec; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qtile-text small { font-size: 18.5px; line-height: 1.15; color: #8f8f8f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qtile-more { width: 49px; height: 100%; display: grid; place-items: center; color: #8a8a8a; flex: none; border-left: 1.5px solid var(--chip-off); }
+.qtile-more:hover { color: var(--text); }
+/* ring with its right half filled, the dark-mode mark */
+.glyph-half { width: 22px; height: 22px; border-radius: 50%; border: 2px solid currentColor; background: linear-gradient(90deg, transparent 50%, currentColor 50%); }
 
-.pslider { position: relative; display: flex; align-items: center; height: 48px; border-radius: 24px; background: var(--card); overflow: hidden; cursor: pointer; }
-.pslider-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--olive); border-radius: 24px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px 0 16px; color: var(--on-olive); transition: width 120ms ease; }
-.pslider input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; }
-.pslider-val { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); font-size: 14px; font-weight: 500; pointer-events: none; }
-.pslider-val.in { position: static; transform: none; color: var(--on-olive); }
-.pslider.disabled { opacity: 0.55; cursor: default; }
-.pslider.disabled .pslider-fill { background: var(--card3); color: var(--muted); }
+/* Volume / brightness: the whole row splits into two tones at the handle. The lighter "played" side
+   ends exactly at the value, and the handle sits just inside its end. There is no track line. */
+.bslider { position: relative; display: flex; align-items: center; justify-content: space-between; height: 66px; padding: 0 28px 0 25px; border-radius: 999px; background: var(--tile); cursor: pointer; overflow: hidden; }
+.bs-ico, .bs-val { position: relative; z-index: 1; pointer-events: none; } /* above the grey layer, never swallowing the drag */
+.bs-ico { color: #ececec; display: grid; place-items: center; flex: none; }
+.bs-fill { position: absolute; left: 0; top: 0; bottom: 0; width: var(--v, 0%); background: var(--tile-fill); transition: width 90ms linear; }
+.bs-track { position: absolute; inset: 0; pointer-events: none; }
+.bs-tick { position: absolute; left: max(calc(var(--v, 0%) - 13px), 13px); top: 50%; width: 4.5px; height: 26px; margin-left: -2.25px; margin-top: -13px; border-radius: 3px; background: #ececec; transition: left 90ms linear; }
+.bslider input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; }
+.bs-val { width: 62px; text-align: right; font-size: 21px; font-weight: 400; color: #ececec; flex: none; font-variant-numeric: tabular-nums; }
+.bslider.disabled { opacity: 0.55; cursor: default; }
 
-/* media card + wavy progress */
-.mcard { background: var(--maroon); border-radius: 28px; color: #f6e6e1; }
-.mcard.wide { padding: 16px 22px; display: flex; flex-direction: column; gap: 10px; }
-.mc-device { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: #cfa89f; }
+/* media card + progress: the device name sits inside the card, the card fills the panel's foot. */
+/* Not a gradient: the card is lit from below. A soft warm glow sits at the bottom edge and fades
+   out well before it reaches the top, which stays near-black. */
+.mcard {
+  border-radius: 26px; color: #f8e9e4;
+  background: radial-gradient(118% 92% at 50% 116%, #66301e 0%, #42241a 38%, #261914 70%, #191211 100%);
+}
+.mcard.wide { flex: none; height: 150px; padding: 16px 22px 14px; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+.mc-device { font-size: 13px; color: #b79c93; }
 .mc-row { display: flex; align-items: center; gap: 16px; }
-.mc-art { width: 72px; height: 72px; border-radius: 16px; overflow: hidden; flex: none; display: grid; place-items: center; background: #4a2f28; color: #e6bdb2; }
+.mc-art { width: 52px; height: 52px; border-radius: 13px; overflow: hidden; flex: none; display: grid; place-items: center; background: #4a2f28; color: #e6bdb2; }
 .mc-art img { width: 100%; height: 100%; object-fit: cover; }
 .mc-text { flex: 1; min-width: 0; }
-.mc-title { font-size: 24px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px; }
-.mc-sub { font-size: 14px; color: #cfa89f; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mc-btns { display: flex; align-items: center; gap: 8px; }
-.mc-side { width: 42px; height: 42px; border-radius: 50%; background: #4a2f28; display: grid; place-items: center; color: #f6e6e1; transition: border-radius 200ms var(--ease), background 160ms; }
-.mc-side:hover { background: #5b3b33; border-radius: 15px; }
-.mc-play { width: 68px; height: 50px; border-radius: 25px; background: var(--pink); color: #3a1710; display: grid; place-items: center; transition: border-radius 200ms var(--ease); }
-.mc-play:hover { border-radius: 17px; }
-.wp { display: flex; align-items: center; gap: 12px; color: #cfa89f; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.mc-title { font-size: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px; }
+.mc-sub { font-size: 14px; color: #d2ada2; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-btns { display: flex; align-items: center; gap: 10px; }
+.mc-side { width: 40px; height: 40px; border-radius: 50%; background: #ffffff1f; display: grid; place-items: center; color: #f8ece8; transition: border-radius 200ms var(--ease), background 160ms; }
+.mc-side:hover { background: #ffffff30; border-radius: 15px; }
+.mc-play { width: 64px; height: 44px; border-radius: 22px; background: #fbf7f4; color: #241410; display: grid; place-items: center; transition: border-radius 200ms var(--ease), transform 140ms var(--ease); }
+.mc-play:hover { border-radius: 16px; }
+.mc-play:active { transform: scale(0.96); }
+.wp { display: flex; align-items: center; gap: 12px; color: #c9a89d; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .wp-t { width: 38px; }
 .wp-t:last-child { text-align: right; }
 .wp-track { position: relative; flex: 1; height: 14px; }
-.wp-line { position: absolute; left: 0; right: 0; top: 50%; height: 3px; margin-top: -1.5px; border-radius: 2px; background: #5a3d35; }
-.wp-wave {
-  position: absolute; left: 0; top: 0; height: 14px; overflow: hidden;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='14' viewBox='0 0 24 14'%3E%3Cpath d='M0 7 Q6 0 12 7 T24 7' fill='none' stroke='%23ffb4a6' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x;
-  background-size: 24px 14px;
-}
-.wp-wave.on { animation: wave 1.1s linear infinite; }
-@keyframes wave { to { background-position-x: 24px; } }
-.wp-dot { position: absolute; top: 50%; width: 9px; height: 9px; border-radius: 50%; background: var(--pink); transform: translate(-50%, -50%); }
+/* The position bar is a wave, not a straight line: one SVG path for the whole track and a second
+   copy of it, revealed up to the play head with a dash, for the played part. */
+.wp-wave { position: absolute; left: 0; top: 0; display: block; overflow: hidden; }
+.wp-line { fill: none; stroke: #ffffff26; stroke-width: 2.4; stroke-linecap: round; }
+.wp-fill { fill: none; stroke: #ff9a76; stroke-width: 2.8; stroke-linecap: round; transition: stroke-dasharray 300ms linear; }
+.wp-dot { position: absolute; top: 50%; width: 9px; height: 9px; border-radius: 50%; background: #ff7a4f; transform: translate(-50%, -50%); }
 
-.mcard.peek { height: 100%; padding: 16px 22px 14px; display: flex; flex-direction: column; justify-content: space-between; border-radius: 0; background: transparent; }
-.mcard.peek .mc-art { width: 54px; height: 54px; border-radius: 15px; }
-.mcard.peek .mc-title { font-size: 17px; padding-right: 30px; }
+.mcard.peek { height: 100%; padding: 18px 24px 16px; display: flex; flex-direction: column; justify-content: space-between; border-radius: 0; background: radial-gradient(104% 90% at 36% 112%, #713321 0%, #713321a0 42%, #71332152 74%, #71332100 100%); /* glow fades out to the island colour, so the top corners match the ears */ }
+.mcard.peek .mc-art { width: 56px; height: 56px; border-radius: 16px; }
+.mcard.peek .mc-title { font-size: 18px; padding-right: 34px; }
 .mcard.peek .mc-sub { font-size: 13px; }
 .mcard.peek .mc-btns { justify-content: center; gap: 12px; }
 .mcard.peek .mc-side { width: 38px; height: 38px; }
-.mcard.peek .mc-play { width: 62px; height: 42px; border-radius: 21px; }
+.mcard.peek .mc-play { width: 64px; height: 44px; border-radius: 22px; background: #ff9a6b; color: #33150d; }
 
 /* ============ stats ============ */
 .stats { height: 100%; display: grid; grid-template-columns: repeat(3, 1fr) 1.38fr; grid-template-rows: 1fr auto; gap: 12px; }
@@ -295,15 +345,17 @@ small { font-size: 12.5px; color: var(--muted); }
 .snip-form { display: grid; grid-template-columns: 1fr 2fr auto; gap: 8px; margin: 0 0 8px; }
 .snip-form input { background: var(--card); border-radius: 12px; padding: 9px 12px; font-size: 14px; }
 .snip-form button { background: var(--olive); color: var(--on-olive); border-radius: 12px; padding: 0 16px; font-weight: 600; }
-.arow2 { display: flex; align-items: center; gap: 14px; height: 56px; padding: 0 16px 0 14px; border-radius: 16px; cursor: pointer; }
+.arow2 { display: flex; align-items: center; gap: 13px; height: 52px; padding: 0 10px 0 14px; border-radius: 16px; cursor: pointer; }
 .arow2.sel { background: var(--sel-bg); }
-.aico { width: 38px; height: 38px; flex: none; border-radius: 10px; overflow: hidden; display: grid; place-items: center; background: var(--card3); color: var(--olive); font-weight: 500; }
+.aico { width: 34px; height: 34px; flex: none; border-radius: 9px; overflow: hidden; display: grid; place-items: center; background: var(--card3); color: var(--olive); font-weight: 500; }
 .aico img { width: 100%; height: 100%; object-fit: contain; }
-.aname { flex: 1; min-width: 0; font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.alabel { padding-right: 26px; font-size: 14px; }
-.aact { display: flex; align-items: center; gap: 14px; color: #d9d06a; }
-.aact small { color: #cfccbc; font-size: 14px; }
-.aact button { color: var(--olive); display: grid; place-items: center; }
+.aname { flex: 1; min-width: 0; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.alabel { margin-left: auto; padding-right: 8px; font-size: 14px; color: var(--muted); }
+.aact-hint { color: #cfccbc; font-size: 13.5px; flex: none; }
+.astar { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: var(--muted); opacity: 0.55; flex: none; }
+.arow2:hover .astar, .arow2.sel .astar { opacity: 1; }
+.astar.on { color: var(--olive); opacity: 1; }
+.astar:hover { background: #ffffff12; color: var(--text); }
 
 /* ============ wallpaper ============ */
 .wall { height: 100%; display: flex; flex-direction: column; gap: 12px; }
@@ -344,6 +396,18 @@ small { font-size: 12.5px; color: var(--muted); }
 .srow > div > small { display: block; margin-top: 2px; }
 .srow kbd { font: inherit; font-size: 13px; background: var(--card3); padding: 5px 12px; border-radius: 9px; white-space: nowrap; }
 .srow.tight { min-height: 44px; }
+/* appearance controls */
+.swatches { display: flex; gap: 9px; flex: none; }
+.swatch { width: 30px; height: 30px; border-radius: 50%; background: var(--sw); border: 2px solid #ffffff26; transition: transform 140ms var(--ease), border-color 140ms; }
+.swatch:hover { transform: scale(1.1); }
+.swatch.on { border-color: var(--olive); box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--olive); }
+.sliders { display: grid; grid-template-columns: auto 250px; align-items: center; gap: 12px 14px; flex: none; }
+.sliders > span { font-size: 13px; color: var(--muted); text-align: right; }
+.rng { -webkit-appearance: none; appearance: none; width: 100%; height: 10px; margin: 0; border-radius: 99px; background: var(--track, var(--card3)); cursor: pointer; }
+.rng::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fbf9f6; border: 4px solid var(--olive); box-shadow: 0 1px 5px #000a; }
+.rng:focus-visible { outline-offset: 4px; }
+.rng-val { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; }
+.rng-wrap { display: flex; align-items: center; gap: 12px; width: 300px; flex: none; }
 
 /* seekable progress bar */
 .wp-track { touch-action: none; user-select: none; }
@@ -400,3 +464,4 @@ small { font-size: 12.5px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+

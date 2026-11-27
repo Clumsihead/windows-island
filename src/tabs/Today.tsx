@@ -137,7 +137,7 @@ function TodoCard() {
           <span className="todo-count">{done}/{todos.length}</span>
         </Ring>
       </div>
-      <div className="todo-list">
+      <div className="todo-list" data-scroll>
         {todos.length === 0 && <div className="todo-empty">Nothing for today yet.<br />Add one below.</div>}
         {todos.map((t) => (
           <div key={t.id} className={`todo ${t.done ? "done" : ""}`}>

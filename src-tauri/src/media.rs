@@ -139,3 +139,58 @@ pub async fn media_seek(seconds: f64) -> Result<(), String> {
         Err("This player doesn't allow seeking".into())
     }
 }
+
+/// Letters and digits only, lower case: "Brave Browser" and "brave.exe" both compare as plain words.
+fn norm(s: &str) -> String {
+    s.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_lowercase()
+}
+
+/// The running .exe that belongs to a media session's app id ("Brave", "Spotify.exe", "MSEdge"...),
+/// so the notch can show that app's real icon. Matches on the exe's name; returns None if unsure.
+fn find_exe(id: &str) -> Option<String> {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+    let want = norm(&pretty_app(id));
+    let raw = norm(id);
+    if want.len() < 3 {
+        return None;
+    }
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet),
+    );
+    let mut best: Option<(usize, String)> = None;
+    for p in sys.processes().values() {
+        let Some(exe) = p.exe() else { continue };
+        let Some(stem) = exe.file_stem().and_then(|s| s.to_str()) else { continue };
+        let stem = norm(stem);
+        if stem.len() < 4 {
+            continue;
+        }
+        // "brave" is inside "bravebrowser"; "chrome" is inside "googlechrome"
+        let hit = want.contains(&stem) || raw.contains(&stem) || (want.len() >= 4 && stem.contains(&want));
+        if !hit {
+            continue;
+        }
+        // the closest name wins, so brave.exe beats braveupdate.exe
+        let score = stem.len().abs_diff(want.len());
+        if best.as_ref().map_or(true, |(b, _)| score < *b) {
+            best = Some((score, exe.to_string_lossy().into_owned()));
+        }
+    }
+    best.map(|(_, path)| path)
+}
+
+/// Path of the app that is playing the current media, for its icon. Looked up once per app change.
+#[tauri::command]
+pub async fn media_source_exe() -> Option<String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let id = current().ok()?.SourceAppUserModelId().ok()?.to_string();
+        find_exe(&id)
+    })
+    .await
+    .ok()
+    .flatten()
+}
+

@@ -80,7 +80,9 @@ export class SpringBox {
   }
 }
 
-// Slight overshoot opening, critically damped closing (so it never bounces into the screen edge).
-export const OPEN: SpringCfg = { k: 240, c: 24 };
-export const RETAB: SpringCfg = { k: 300, c: 31 };
+// Damping ratio ζ = c / (2√k). Slight overshoot opening, a small punch when switching tabs
+// (ζ ≈ 0.60 gives about 9% overshoot — bouncy, not wobbly), and a critically damped close so
+// it never bounces into the screen edge.
+export const OPEN: SpringCfg = { k: 300, c: 26 };
+export const RETAB: SpringCfg = { k: 430, c: 25 };
 export const CLOSE: SpringCfg = { k: 380, c: 39 };

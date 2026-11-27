@@ -52,11 +52,21 @@ export type Clip = {
   pinned: boolean;
 };
 export type AppEntry = { name: string; path: string };
+export type IslandWheel = { dir: number; x: number; y: number };
 export type UpdateInfo = { version: string; notes: string | null };
 export type SizeKey = "small" | "medium" | "large";
 // "desktop": only on the desktop.  "peek": everywhere, but only a thin edge shows over other apps.
 export type Visibility = "desktop" | "peek";
-export type Settings = { size: SizeKey; visibility: Visibility; autoUpdate: boolean };
+// What the island does while an app is full screen (F11, video, game).
+export type FullscreenMode = "visible" | "hidden";
+export type Settings = {
+  size: SizeKey;
+  visibility: Visibility;
+  fullscreen: FullscreenMode;
+  autoUpdate: boolean;
+  nightEnabled: boolean;
+  nightStrength: number;
+};
 export type UpdaterStatus = { configured: boolean; current: string; lastChecked: number | null; lastResult: string };
 
 export const EMPTY_MEDIA: Media = {
@@ -72,6 +82,7 @@ export const api = {
   getSettings: () => invoke<Settings>("settings_get"),
   setIslandSize: (size: SizeKey) => invoke("set_island_size", { size }),
   setVisibility: (mode: Visibility) => invoke("set_visibility_mode", { mode }),
+  setFullscreenMode: (mode: FullscreenMode) => invoke("set_fullscreen_mode", { mode }),
   getIsland: () => invoke<{ expanded: boolean; held: boolean; tucked: boolean }>("island_get"),
   // system
   stats: () => invoke<Stats>("system_stats"),
@@ -83,6 +94,7 @@ export const api = {
   mediaArt: () => invoke<string | null>("media_art"),
   mediaControl: (action: "toggle" | "next" | "prev") => invoke("media_control", { action }),
   mediaSeek: (seconds: number) => invoke("media_seek", { seconds }),
+  mediaSourceExe: () => invoke<string | null>("media_source_exe"),
   // Controls tab panels
   battery: () => invoke<BatteryInfo>("battery_get"),
   wifiScan: () => invoke<WifiRaw>("wifi_scan"),
@@ -95,6 +107,7 @@ export const api = {
   audioDevices: () => invoke<AudioDevices>("audio_devices"),
   setDefaultAudio: (id: string) => invoke("audio_set_default", { id }),
   audio: () => invoke<Audio | null>("audio_get"),
+  audioLevel: () => invoke<number>("audio_level"),
   audioDevice: () => invoke<string | null>("audio_device"),
   setVolume: (volume: number) => invoke("audio_set_volume", { volume }),
   toggleMute: () => invoke("audio_toggle_mute"),
@@ -106,6 +119,8 @@ export const api = {
   brightnessGet: () => invoke<number | null>("brightness_get"),
   brightnessSet: (percent: number) => invoke("brightness_set", { percent }),
   openSettings: (page: string) => invoke("open_settings", { page }),
+  // the island's own night light (a warm tint over every display)
+  nightSet: (enabled: boolean, strength: number) => invoke("night_set", { enabled, strength }),
   // clipboard
   clips: () => invoke<Clip[]>("clipboard_history"),
   clipCopy: (id: string) => invoke("clipboard_copy", { id }),
@@ -139,6 +154,7 @@ export const onSettings = (cb: (s: Settings) => void) => listen<Settings>("setti
 export const onTucked = (cb: (tucked: boolean) => void) => listen<boolean>("island:tucked", (e) => cb(e.payload));
 export const onBrightness = (cb: (percent: number) => void) => listen<number>("brightness:changed", (e) => cb(e.payload));
 export const onGoto = (cb: (tab: string) => void) => listen<string>("island:goto", (e) => cb(e.payload));
+export const onWheel = (cb: (e: IslandWheel) => void) => listen<IslandWheel>("island:wheel", (e) => cb(e.payload));
 export const onClips = (cb: (c: Clip[]) => void) => listen<Clip[]>("clipboard:changed", (e) => cb(e.payload));
 export const onUpdate = (cb: (u: UpdateInfo) => void) => listen<UpdateInfo>("update:available", (e) => cb(e.payload));
 export const onUpdateProgress = (cb: (pct: number | null) => void) =>

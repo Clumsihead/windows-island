@@ -86,7 +86,7 @@ export default function Wallpaper({ flash }: TabProps) {
         <button className="round-btn" onClick={chooseFolder} aria-label="Choose a folder" title="Choose a folder"><FolderOpen size={20} /></button>
       </div>
 
-      <div className="wall-strip" onWheel={onWheel}>
+      <div className="wall-strip" onWheel={onWheel} data-scroll>
         {rendered.map(({ p, i, o }) => {
           const kind = o === 0 ? "center" : Math.abs(o) <= 2 ? "side" : "hid";
           const src = Math.abs(o) <= 3 ? thumb(p) : undefined;

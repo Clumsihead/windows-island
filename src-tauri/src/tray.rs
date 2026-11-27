@@ -61,11 +61,20 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let vis_menu = Submenu::with_items(app, "Visibility", true, &[&vis_items[0].1, &vis_items[1].1])?;
     *app.state::<settings::SettingsState>().vis_menu.lock().unwrap() = vis_items;
 
+    let fs_now = app.state::<settings::SettingsState>().current.lock().unwrap().fullscreen.clone();
+    let mut fs_items: Vec<(String, CheckMenuItem<tauri::Wry>)> = Vec::new();
+    for (key, label) in [("visible", "Keep visible"), ("hidden", "Hide")] {
+        let item = CheckMenuItem::with_id(app, format!("fs_{key}"), label, true, key == fs_now, None::<&str>)?;
+        fs_items.push((key.to_string(), item));
+    }
+    let fs_menu = Submenu::with_items(app, "In full screen", true, &[&fs_items[0].1, &fs_items[1].1])?;
+    *app.state::<settings::SettingsState>().fs_menu.lock().unwrap() = fs_items;
+
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
-        &[&version, &sep_top, &toggle, &vis_menu, &autostart, &size_menu, &updates, &sep, &quit],
+        &[&version, &sep_top, &toggle, &vis_menu, &fs_menu, &autostart, &size_menu, &updates, &sep, &quit],
     )?;
 
     let autostart_item = autostart.clone();
@@ -79,6 +88,12 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
             }
             "vis_peek" => {
                 let _ = settings::set_visibility(app, "peek");
+            }
+            "fs_visible" => {
+                let _ = settings::set_fullscreen(app, "visible");
+            }
+            "fs_hidden" => {
+                let _ = settings::set_fullscreen(app, "hidden");
             }
             "autostart" => {
                 let on = autostart_item.is_checked().unwrap_or(false);

@@ -143,8 +143,8 @@ export function WifiPanel({ flash, onSettings }: PanelProps) {
   return (
     <Shell title="Wi-Fi networks" subtitle={subtitle} loading={loading} onRefresh={refresh} onSettings={onSettings}>
       <div className="cpanel-body two">
-        <div className="pcol">{current ? row(current) : <div className="pempty">Not connected</div>}</div>
-        <div className="pcol">
+        <div className="pcol" data-scroll>{current ? row(current) : <div className="pempty">Not connected</div>}</div>
+        <div className="pcol" data-scroll>
           {others.map(row)}
           {list && others.length === 0 && !current && <div className="pempty">{list.note || "No networks found"}</div>}
         </div>
@@ -183,7 +183,7 @@ export function BluetoothPanel({ onSettings }: PanelProps) {
   return (
     <Shell title="Bluetooth devices" subtitle={subtitle} loading={loading} onRefresh={refresh} onSettings={onSettings}>
       <div className="cpanel-body two">
-        <div className="pcol span">
+        <div className="pcol span" data-scroll>
           {(data ?? []).map((d) => (
             <div key={d.address} className={`prow ${d.connected ? "sel" : ""}`}>
               <span className="prow-ico">{btIcon(d.kind)}</span>
@@ -228,7 +228,7 @@ export function AudioPanel({ onSettings }: PanelProps) {
   };
 
   const column = (title: string, list: AudioDevice[], input: boolean) => (
-    <div className="pcol">
+    <div className="pcol" data-scroll>
       <div className="pcol-title">{title}</div>
       {list.map((d) => {
         const shown = pick ? d.id === pick : d.isDefault; // the tapped one lights up straight away

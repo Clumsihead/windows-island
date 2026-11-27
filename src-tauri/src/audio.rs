@@ -1,7 +1,7 @@
 //! Master volume of the default output device via Core Audio.
 
 use serde::Serialize;
-use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
+use windows::Win32::Media::Audio::Endpoints::{IAudioEndpointVolume, IAudioMeterInformation};
 use windows::Win32::Media::Audio::{eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -75,3 +75,21 @@ fn device_name() -> Option<String> {
 pub async fn audio_device() -> Option<String> {
     tauri::async_runtime::spawn_blocking(device_name).await.ok().flatten()
 }
+
+/// How loud the default output device is right now, 0.0 - 1.0 (the Windows peak meter).
+/// Drives the little level bars in the notch, so it is polled often and kept cheap.
+fn peak() -> windows::core::Result<f32> {
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+        let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole)?;
+        let meter = device.Activate::<IAudioMeterInformation>(CLSCTX_ALL, None)?;
+        meter.GetPeakValue()
+    }
+}
+
+#[tauri::command]
+pub async fn audio_level() -> f32 {
+    tauri::async_runtime::spawn_blocking(|| peak().unwrap_or(0.0)).await.unwrap_or(0.0)
+}
+

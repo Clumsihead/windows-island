@@ -47,6 +47,10 @@ pub struct Island {
     pub hide_pending: AtomicBool,
     pub desktop_only: AtomicBool,
     pub desktop_active: AtomicBool,
+    /// User option: keep the island out of sight while an app is full screen.
+    pub hide_in_fullscreen: AtomicBool,
+    /// The front-most app window currently fills the whole screen (set by foreground.rs).
+    pub fullscreen_active: AtomicBool,
     /// "Everywhere" mode with another app in front: only the island's bottom edge shows.
     pub tucked: AtomicBool,
     /// Lets the sole foreground monitor stop promptly during application exit.
@@ -73,6 +77,8 @@ impl Island {
             // Desktop-only behavior remains an explicit tray-menu option.
             desktop_only: AtomicBool::new(false),
             desktop_active: AtomicBool::new(false),
+            hide_in_fullscreen: AtomicBool::new(false),
+            fullscreen_active: AtomicBool::new(false),
             tucked: AtomicBool::new(false),
             foreground_running: Arc::new(AtomicBool::new(true)),
             forced: AtomicBool::new(false),
@@ -175,6 +181,24 @@ fn show_noactivate(win: &WebviewWindow) {
     }
 }
 
+/// While an app is full screen the user's full-screen option decides on its own: "visible" shows
+/// the whole notch with the clock (not the tucked sliver), "hidden" hides it.
+fn fullscreen_shows(st: &Island) -> bool {
+    st.fullscreen_active.load(SeqCst) && !st.hide_in_fullscreen.load(SeqCst)
+}
+
+/// Whether the island should be on screen right now. The hotkey (`forced`) is a deliberate request
+/// and always wins; then the full-screen option; otherwise the visibility mode.
+fn wanted(st: &Island) -> bool {
+    if st.forced.load(SeqCst) {
+        return true;
+    }
+    if st.fullscreen_active.load(SeqCst) {
+        return !st.hide_in_fullscreen.load(SeqCst);
+    }
+    !st.desktop_only.load(SeqCst) || st.desktop_active.load(SeqCst)
+}
+
 /// Single place that decides whether the window is on screen at all.
 pub fn apply_visibility(app: &AppHandle) {
     refresh_tucked(app);
@@ -182,8 +206,7 @@ pub fn apply_visibility(app: &AppHandle) {
     let Some(win) = app.get_webview_window(LABEL) else {
         return;
     };
-    let want =
-        !st.desktop_only.load(SeqCst) || st.desktop_active.load(SeqCst) || st.forced.load(SeqCst);
+    let want = wanted(&st);
     let visible = st.visible.load(SeqCst);
 
     if want && !visible {
@@ -200,9 +223,7 @@ pub fn apply_visibility(app: &AppHandle) {
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(500));
             let st = app.state::<Island>();
-            let still_wanted = !st.desktop_only.load(SeqCst)
-                || st.desktop_active.load(SeqCst)
-                || st.forced.load(SeqCst);
+            let still_wanted = wanted(&st);
             if !still_wanted && st.visible.load(SeqCst) && !st.expanded.load(SeqCst) {
                 if let Some(win) = app.get_webview_window(LABEL) {
                     hide_raw(&win);
@@ -242,9 +263,11 @@ pub fn set_expanded(app: &AppHandle, next: bool) {
 /// bottom edge peeks out at the top of the screen. The UI does the sliding; this says when.
 fn refresh_tucked(app: &AppHandle) {
     let st = app.state::<Island>();
+    // In full screen with the option on "visible" the notch shows in full, so it never tucks.
     let tucked = !st.desktop_only.load(SeqCst)
         && !st.desktop_active.load(SeqCst)
-        && !st.forced.load(SeqCst);
+        && !st.forced.load(SeqCst)
+        && !fullscreen_shows(&st);
     if st.tucked.swap(tucked, SeqCst) != tucked {
         let _ = app.emit("island:tucked", tucked);
     }
@@ -256,6 +279,19 @@ pub fn set_desktop_only(app: &AppHandle, on: bool) {
     apply_visibility(app);
 }
 
+pub fn set_hide_in_fullscreen(app: &AppHandle, on: bool) {
+    app.state::<Island>().hide_in_fullscreen.store(on, SeqCst);
+    apply_visibility(app);
+}
+
+/// Called by the foreground monitor when an app enters or leaves full screen.
+pub fn set_fullscreen_active(app: &AppHandle, on: bool) {
+    let st = app.state::<Island>();
+    if st.fullscreen_active.swap(on, SeqCst) != on {
+        apply_visibility(app);
+    }
+}
+
 /// Ctrl+Alt+Shift+I / tray "Toggle island".
 pub fn hotkey(app: &AppHandle) {
     let st = app.state::<Island>();
@@ -263,7 +299,7 @@ pub fn hotkey(app: &AppHandle) {
         set_expanded(app, false);
         return;
     }
-    if st.desktop_only.load(SeqCst) && !st.desktop_active.load(SeqCst) {
+    if !wanted(&st) {
         st.forced.store(true, SeqCst);
     }
     remember_foreground(app);
@@ -343,6 +379,25 @@ mod tests {
     }
 
     #[test]
+    fn fullscreen_hides_only_when_opted_in_and_hotkey_overrides() {
+        let st = Island::new();
+        assert!(wanted(&st)); // default: shown
+        st.fullscreen_active.store(true, SeqCst);
+        assert!(wanted(&st)); // option on "visible": still shown in full screen
+        assert!(fullscreen_shows(&st)); // ...as the full notch, not the tucked sliver
+        st.desktop_only.store(true, SeqCst);
+        assert!(wanted(&st)); // even in desktop-only mode, the full-screen option decides
+        st.desktop_only.store(false, SeqCst);
+        st.hide_in_fullscreen.store(true, SeqCst);
+        assert!(!wanted(&st)); // option on: hidden in full screen
+        st.forced.store(true, SeqCst);
+        assert!(wanted(&st)); // hotkey summon wins
+        st.forced.store(false, SeqCst);
+        st.fullscreen_active.store(false, SeqCst);
+        assert!(wanted(&st)); // left full screen: back
+    }
+
+    #[test]
     fn desktop_only_visibility_is_off_by_default() {
         assert!(!Island::new().desktop_only.load(SeqCst));
     }
@@ -370,6 +425,7 @@ pub fn start_hover_loop(app: AppHandle) {
             if st.desktop_only.load(SeqCst)
                 && !st.desktop_active.load(SeqCst)
                 && !st.forced.load(SeqCst)
+                && !fullscreen_shows(&st)
             {
                 in_since = None;
                 out_since = None;
@@ -394,9 +450,15 @@ pub fn start_hover_loop(app: AppHandle) {
 
             if !expanded {
                 out_since = None;
-                if soft && !dragging {
+                // Button up: ordinary hover. A held button (title-bar drag, text selection...) never opens it.
+                let hot = !dragging && soft;
+                if hot {
                     let t = *in_since.get_or_insert_with(Instant::now);
-                    let need = if st.tucked.load(SeqCst) { HOVER_OPEN_TUCKED } else { HOVER_OPEN };
+                    let need = if st.tucked.load(SeqCst) {
+                        HOVER_OPEN_TUCKED
+                    } else {
+                        HOVER_OPEN
+                    };
                     if t.elapsed() >= need {
                         set_expanded(&app, true);
                         in_since = None;

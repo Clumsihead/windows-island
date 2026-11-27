@@ -21,6 +21,7 @@
         "decorations": false,
         "transparent": true,
         "shadow": false,
+        "dragDropEnabled": false,
         "resizable": false,
         "maximizable": false,
         "minimizable": false,

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 export function Ring({
   pct, color, size = 120, stroke = 12, children,
@@ -21,24 +21,31 @@ export function Ring({
   );
 }
 
-/** Big rounded slider with the icon inside the fill and the value on the right. */
+/** Flat bar slider: the row splits into two tones at the handle, icon on the left, reading right. */
 export function PillSlider({
   icon, value, onChange, disabled, label, hint, onDragStart,
 }: {
   icon: ReactNode; value: number; onChange: (v: number) => void; disabled?: boolean; label: string; hint?: string;
   onDragStart?: () => void;
 }) {
+  const v = Math.max(0, Math.min(100, Math.round(value)));
   return (
-    <label className={`pslider ${disabled ? "disabled" : ""}`} title={hint} onPointerDown={onDragStart}>
-      <span className="pslider-fill" style={{ width: `max(56px, ${value}%)` }}>
-        <span className="pslider-icon">{icon}</span>
-        {value >= 88 && !disabled && <b className="pslider-val in">{value}%</b>}
+    <label
+      className={`bslider ${disabled ? "disabled" : ""}`}
+      title={hint}
+      onPointerDown={onDragStart}
+      style={{ ["--v" as string]: `${v}%` } as CSSProperties}
+    >
+      <span className="bs-ico">{icon}</span>
+      <span className="bs-fill" aria-hidden />
+      <span className="bs-track">
+        <i className="bs-tick" aria-hidden />
       </span>
+      <b className="bs-val">{disabled ? "n/a" : `${v}%`}</b>
       <input
         type="range" min={0} max={100} value={value} disabled={disabled} aria-label={label}
         onChange={(e) => onChange(Number(e.target.value))}
       />
-      {(value < 88 || disabled) && <b className="pslider-val">{disabled ? "n/a" : `${value}%`}</b>}
     </label>
   );
 }

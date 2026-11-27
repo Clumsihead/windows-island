@@ -85,7 +85,7 @@ export default function ClipboardTab({ flash }: TabProps) {
       </div>
 
       <div className="clip-body">
-        <div className="clist" ref={listRef}>
+        <div className="clist" ref={listRef} data-scroll>
           {shown.map((c) => (
             <button key={c.id} className={`crow ${active?.id === c.id ? "sel" : ""}`} onClick={() => setSel(c.id)} onDoubleClick={() => run(api.clipPaste(c.id))}>
               <span className="cthumb">
@@ -104,7 +104,7 @@ export default function ClipboardTab({ flash }: TabProps) {
         <div className="cpreview">
           {active ? (
             <>
-              <div className="cprev-main">
+              <div className="cprev-main" data-scroll>
                 {active.thumb ? <img src={active.thumb} alt="" /> : <pre>{active.text}</pre>}
               </div>
               <dl>
