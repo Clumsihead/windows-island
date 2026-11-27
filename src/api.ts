@@ -106,6 +106,7 @@ export const api = {
   setBluetooth: (address: string, connect: boolean) => invoke("bluetooth_set_connected", { address, connect }),
   audioDevices: () => invoke<AudioDevices>("audio_devices"),
   setDefaultAudio: (id: string) => invoke("audio_set_default", { id }),
+  setNight: (enabled: boolean, strength: number) => invoke("night_set", { enabled, strength }),
   audio: () => invoke<Audio | null>("audio_get"),
   audioLevel: () => invoke<number>("audio_level"),
   audioDevice: () => invoke<string | null>("audio_device"),

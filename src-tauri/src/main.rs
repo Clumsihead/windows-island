@@ -181,6 +181,7 @@ fn main() {
 
     app.run(|handle, event| {
         if let RunEvent::Exit = event {
+            nightlight::reset(); // never leave the screen tinted behind
             handle
                 .state::<island::Island>()
                 .foreground_running
